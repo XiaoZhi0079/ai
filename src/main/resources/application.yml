@@ -1,0 +1,126 @@
+server:
+  port: 8081
+
+
+aliyun :
+  oss:
+    endpoint: https://oss-cn-beijing.aliyuncs.com
+    bucket: java-ai-1968
+    region: cn-beijing
+
+
+ai:
+  platforms:
+    - name: dashscope
+      api-key: sk-0ff8034547cc4716a2ac8dfd7618e897
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      options:
+          - model: qwen3-omni-flash-2025-12-01  #qwen3-vl-plus  #视觉理解模型
+            temperature: 0.7
+            max-tokens: 1024
+
+          - model: wan2.5-t2v-preview #文生视频模型
+            temperature: 0.9
+            max-tokens: 1024
+
+          - model: wan2.5-i2v-preview #图生视频模型
+            temperature: 0.9
+            max-tokens: 1024
+
+          - model: wan2.5-t2i-preview #文生图模型
+            temperature: 0.9
+            max-tokens: 1024
+
+
+    - name: modelscope
+      api-key: ms-041e1996-c54f-465e-90d8-6beba54959ae
+      base-url: https://modelscope.cn/openapi
+      options:
+          - model: GLM-4.7
+            temperature: 0.7
+            max-tokens: 1024
+
+          - model: gpt-4
+            temperature: 0.9
+            max-tokens: 1024
+
+          - model: gpt-5
+            temperature: 0.9
+            max-tokens: 1024
+
+    - name: iflow
+      api-key: sk-fd5f475b5160d1ca41c9cf54b85beaca
+      base-url: https://apis.iflow.cn
+      options:
+          - model: qwen3-coder
+            temperature: 0.7
+            max-tokens: 1024
+
+          - model: qwen3-max-preview
+            temperature: 0.9
+            max-tokens: 1024
+
+          - model: deepseek-v3.1
+            temperature: 0.9
+            max-tokens: 1024
+
+
+spring:
+  ai:
+    openai:
+      base-url: https://apis.iflow.cn
+      api-key: sk-fd5f475b5160d1ca41c9cf54b85beaca
+      chat:
+        options:
+          model: qwen-vl-max
+          temperature: 0.8
+
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+
+  application:
+    name: ai
+  datasource:
+    url: jdbc:mysql://localhost:3306/ai?useSSL=false&serverTimezone=Asia/Shanghai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: root
+    hikari:
+      auto-commit: true
+
+  jpa:
+    hibernate:
+      ddl-auto: update     # ????? update/create?????? none + Flyway/Liquibase
+    show-sql: true
+    properties:
+      hibernate.format_sql: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor: debug
+    com.example.ai: debug
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: default
+      paths-to-match: '/**'
+      packages-to-scan: com.example.ai.control
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
