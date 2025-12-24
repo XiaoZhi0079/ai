@@ -1,6 +1,5 @@
 package com.example.ai.service;
 
-import com.alibaba.dashscope.threads.ContentImageFile;
 import com.example.ai.Tool.DateTimeTools;
 import com.example.ai.repository.ChatHistoryRepository;
 import com.example.ai.utils.AliyunOssClientPutObject;
@@ -45,14 +44,14 @@ public class ChatService {
         return newchatClientconfig.get(model).mutate()
                 .defaultSystem(defaultSystem)
                 .build()
-                .prompt("What day is tomorrow?")
+                .prompt("你是一个乐于助人的模型")
                 .tools(new DateTimeTools())
                 .user(u -> {
                     if(userinput != null && !userinput.isBlank()){
                         u.text(userinput);
                     }
                     else{
-                        u.text("你是ai助手");
+                        u.text("userinput");
                     }
                     if(imageFile != null){
                         String url = null;

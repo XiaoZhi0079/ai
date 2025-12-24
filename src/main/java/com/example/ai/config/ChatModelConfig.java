@@ -82,7 +82,7 @@ public class ChatModelConfig {
 //                                                    .defaultSystem("您是一个由 " + platform.getName() + " 提供支持的有用助手。")
                                                     .defaultAdvisors(
                                                             new SimpleLoggerAdvisor(),
-                                                            MessageChatMemoryAdvisor.builder(chatMemory2()).build()
+                                                            MessageChatMemoryAdvisor.builder(chatMemory()).build()
                                                     )
                                                     .build();
                                         }

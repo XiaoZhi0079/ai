@@ -7,8 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 
@@ -86,7 +88,10 @@ class DemoApplicationTests {
         }
     }
 
-
+    @Test
+    void getCurrentDateTime() {
+        System.out.println(LocalDateTime.now().atZone(LocaleContextHolder.getTimeZone().toZoneId()).toString());
+    }
 
 
 }
