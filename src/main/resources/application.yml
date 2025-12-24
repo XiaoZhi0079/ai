@@ -66,7 +66,20 @@ ai:
 
 
 spring:
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 9379
+      password: 123456
+
   ai:
+    vectorstore:
+      redis:
+        initialize-schema: true # 是否初始化所需的模式
+        index-name: lee-vectorstore # 用于存储向量的索引名称
+        prefix: 'lee:' # redis 键的前缀
+
     openai:
       base-url: https://apis.iflow.cn
       api-key: sk-fd5f475b5160d1ca41c9cf54b85beaca
@@ -81,10 +94,11 @@ spring:
           jdbc:
             initialize-schema: always
 
+
   application:
     name: ai
   datasource:
-    url: jdbc:mysql://localhost:3306/ai?useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://8.138.19.224/ai
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: root
     password: root
@@ -101,6 +115,9 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
+
+
+
 
 logging:
   level:
