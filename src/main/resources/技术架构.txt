@@ -1,0 +1,71 @@
+graph TD
+    %% === 节点样式配置 ===
+    classDef root fill:#ffccff,stroke:#ff99ff,stroke-width:2px,rx:5,ry:5;
+    classDef layer fill:#e6e6ff,stroke:#ccccff,stroke-width:1px,rx:5,ry:5;
+    classDef greenFrame fill:#99ff99,stroke:#66cc66,stroke-width:2px,rx:5,ry:5;
+    classDef subItem fill:#f2f2ff,stroke:#ccccff,stroke-width:1px,rx:5,ry:5;
+    classDef db fill:#e0e0e0,stroke:#bbbbbb,stroke-width:1px,rx:5,ry:5;
+    classDef sse fill:#ffff99,stroke:#ffcc00,stroke-width:2px,rx:5,ry:5,stroke-dasharray: 5 5;
+
+    %% === 根节点 ===
+    Root[校园知识问答助手系统]:::root
+
+    %% === 第一层 ===
+    Frontend[前端表现层]:::layer
+    Backend[后端业务逻辑层]:::layer
+    Root --> Frontend
+    Root --> Backend
+
+    %% === 核心框架 ===
+    VueFrame[Vue.js 3 框架及 Element UI Plus]:::greenFrame
+    SpringFrame[Spring Boot 3 框架]:::greenFrame
+    Frontend --> VueFrame
+    Backend --> SpringFrame
+
+    %% === 前端子模块 ===
+    VueRouter[Vue Router 路由管理]:::subItem
+    Pinia[Pinia 状态管理]:::subItem
+    Axios[Axios/Fetch 数据交互]:::subItem
+    VueFrame --> VueRouter
+    VueFrame --> Pinia
+    VueFrame --> Axios
+
+    %% === 后端子模块 (关键修改处) ===
+    %% 这里的顺序决定了从左到右的排列
+    %% 1. 先写 SSE，让它排在最左边
+    SSE[SSE 流式响应处理]:::sse
+    SpringFrame --> SSE
+
+    %% 2. 再写 Security
+    Security[Spring Security + JWT 鉴权]:::subItem
+    SpringFrame --> Security
+
+    %% 3. 然后是 AI 核心
+    SpringAI[Spring AI 核心框架]:::subItem
+    SpringFrame --> SpringAI
+
+    %% 4. 最后是数据层
+    DataLayer[数据持久层]:::subItem
+    SpringFrame --> DataLayer
+    
+    %% === Spring AI 内部 ===
+    Chat[ChatClient]:::subItem
+    Embed[EmbeddingClient]:::subItem
+    Multi[Multimodal API]:::subItem
+    Tika[Tika 文档解析]:::subItem
+    SpringAI --> Chat
+    SpringAI --> Embed
+    SpringAI --> Multi
+    SpringAI --> Tika
+
+    %% === 数据层内部 ===
+    MySQL[MySQL 数据库]:::db
+    Redis[Redis Stack/向量数据库]:::db
+    LocalFile[本地文件/对象存储]:::db
+    DataLayer --> MySQL
+    DataLayer --> Redis
+    DataLayer --> LocalFile
+
+    %% === 跨层级连接 ===
+    %% Axios 指向 SSE (虚线)
+    Axios -.-> SSE
