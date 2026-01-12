@@ -11,20 +11,22 @@ import com.example.ai.service.SearXngService;
 import com.example.ai.utils.AliyunOssClientPutObject;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.multipart.MultipartFile;
-import reactor.core.publisher.Flux;
-import lombok.extern.slf4j.Slf4j;
+
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
@@ -35,97 +37,143 @@ import java.util.stream.Collectors;
 @Service
 public class ChatServiceImpl implements ChatService {
 
-    // 注入由 创建的 Map<String, ChatClient> Bean
-    private final Map<String,ChatClient> newchatClientconfig;
-
-    //记忆
+    // 优化命名：chatClientMap 更直观
+    private final Map<String, ChatClient> chatClientMap;
     private final ChatHistoryRepository chatHistoryRepository;
-
-    //存储桶
     private final AliyunOssClientPutObject aliyunOssClientPutObject;
-
-    //文档切分
     private final DocumentService documentService;
-
-    //搜索引擎
     private final SearXngService searXngService;
 
-
-
-    //Rag提示词
     @Value("${prompt.RAG_PROMPT_TEMPLATE}")
-    String RAG_PROMPT_TEMPLATE;
+    private String ragPromptTemplateStr;
 
-    // 新增：为联网搜索提示词
     @Value("${prompt.INTERNET_SEARCH_PROMPT_TEMPLATE}")
-    String INTERNET_SEARCH_PROMPT_TEMPLATE;
-
-
+    private String internetSearchPromptTemplateStr;
 
     @PostConstruct
     public void init() {
-        System.out.println("newchatClientconfig size = " + newchatClientconfig.size());
-        System.out.println("keys = " + newchatClientconfig.keySet());
+        log.info("已加载 ChatClients, 可用模型: {}", chatClientMap.keySet());
     }
 
+    private record MediaResource(MimeType mimeType, URL url) {}
 
-    public String chat(ChatEntity chatEntity) throws IOException {
+    @Override
+    public String chat(ChatEntity chatEntity) {
+        String chatId = chatEntity.getChatId();
+        String modelName = chatEntity.getModel();
+        
+        // 记录历史（建议检查这里具体保存了什么，通常应该只保存会话元数据，内容由ChatMemory处理）
+        chatHistoryRepository.save(chatId, "chat");
 
-        String chatid = chatEntity.getChatId();
-        String userinput = chatEntity.getUserInput();
-        MultipartFile imgfile = chatEntity.getImageFile();
-        ChatMode chatMode = chatEntity.getChatMode();
-        chatHistoryRepository.save(chatid, "chat");
-
-        ChatClient chatClient = newchatClientconfig.get(chatEntity.getModel());
-
-
-        //后续增加异常处理
+        ChatClient chatClient = chatClientMap.get(modelName);
         if (chatClient == null) {
-            throw new IllegalArgumentException("ChatClient is null. Model not found for name: '" + chatEntity.getModel() + "'. Available models: " + newchatClientconfig.keySet());
+            throw new IllegalArgumentException(String.format("模型不存在: '%s'。可用模型: %s", modelName, chatClientMap.keySet()));
         }
 
-        return switch (chatMode) {
-            case INTERNET_SEARCH -> internetSearch(chatEntity, chatClient, chatid, userinput, imgfile);
-            case KNOWLEDGE_BASE  -> knowledgeBase(chatEntity, chatClient, chatid, userinput, imgfile);
-            case DIRECT          -> direct(chatEntity, chatClient, chatid, userinput, imgfile);
-        };
+        // 1. 根据模式构建 Prompt 对象
+        Prompt prompt = buildPromptByMode(chatEntity);
 
-//        if (chatMode.equals("INTERNET_SEARCH")) {
-//           return ......
-//        } else if (chatMode.equals("KNOWLEDGE_BASE")) {
-//           return  ......
-//        } else if (chatMode.equals("DIRECT")) {
-//            return chatClient.prompt("你是一个乐于助人的模型")
-//                    .tools(new DateTimeTools())
-//                    .user(u -> {
-//                        if (userinput != null && !userinput.isBlank()) {
-//                            u.text(userinput);
-//                        } else {
-//                            u.text("userinput");
-//                        }
-//                        if (chatEntity.getImageFile() != null) {
-//                            String url = null;
-//                            try {
-//                                url = aliyunOssClientPutObject.upload(imgfile.getInputStream(), chatEntity.getImageFile().getOriginalFilename());
-//                            } catch (IOException e) {
-//                                throw new RuntimeException(e);
-//                            }
-//                            try {
-//                                u.media(MimeTypeUtils.IMAGE_PNG, new URL(url));
-//                            } catch (MalformedURLException e) {
-//                                throw new RuntimeException(e);
-//                            }
-//                        }
-//                    })
-//                    .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, chatid))
-//                    .call()
-//                    .content();
-//        } else {
-//            //异常处理待续
-//            return 'Error';
-//        }
+        // 2. 准备图片媒体信息（如果有）
+        MediaResource media = uploadAndPrepareMedia(chatEntity.getImageFile());
+
+        // 3. 调用 AI
+        return chatClient.prompt(prompt)
+                .tools(new DateTimeTools()) // 如果 DateTimeTools 无状态，建议注册为 Bean 注入，避免每次 new
+                .user(u -> {
+                    // 如果有 PromptTemplate 生成的内容，这里不需要再 set text，Spring AI 会自动合并
+                    // 但这里主要是为了附加多模态图片
+                    if (media != null) {
+                        u.media(media.mimeType(), media.url());
+                    }
+                })
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, chatId))
+                .call()
+                .content();
     }
+
+    /**
+     * 根据聊天模式构建基础 Prompt
+     */
+    private Prompt buildPromptByMode(ChatEntity chatEntity) {
+        String userName = chatEntity.getUserName();
+        String userInput = chatEntity.getUserInput();
+        ChatMode chatMode = chatEntity.getChatMode();
+
+        switch (chatMode) {
+            case INTERNET_SEARCH:
+                return createInternetSearchPrompt(userName, userInput);
+            case KNOWLEDGE_BASE:
+                return createKnowledgeBasePrompt(userName, userInput);
+            case DIRECT:
+                return createDirectPrompt(userName, userInput);
+            default:
+                throw new IllegalArgumentException("不支持的聊天模式: " + chatMode);
+        }
+    }
+
+    private Prompt createKnowledgeBasePrompt(String userId, String userInput) {
+        log.info("【用户: {}】使用【知识库模式】", userId);
+        List<Document> relatedDocs = documentService.doSearch(userInput);
+
+        String context = CollectionUtils.isEmpty(relatedDocs) ?
+                "没有找到相关的知识库信息。" :
+                relatedDocs.stream().map(Document::getText).collect(Collectors.joining("\n---\n"));
+
+        // 优化：使用 PromptTemplate
+        PromptTemplate template = new PromptTemplate(ragPromptTemplateStr);
+        return template.create(Map.of("context", context, "question", userInput));
+    }
+
+    private Prompt createInternetSearchPrompt(String userId, String userInput) {
+        log.info("【用户: {}】使用【联网搜索模式】", userId);
+        List<SearchResult> searchResults = searXngService.search(userInput);
+
+        String context = CollectionUtils.isEmpty(searchResults) ?
+                "未能获取到有效的网络搜索结果。" :
+                searchResults.stream()
+                        .map(r -> String.format("【标题】: %s\n【摘要】: %s\n【链接】: %s", r.getTitle(), r.getContent(), r.getUrl()))
+                        .collect(Collectors.joining("\n\n---\n\n"));
+
+        // 优化：使用 PromptTemplate
+        PromptTemplate template = new PromptTemplate(internetSearchPromptTemplateStr);
+        return template.create(Map.of("context", context, "question", userInput));
+    }
+
+    private Prompt createDirectPrompt(String userId, String userInput) {
+        log.info("【用户: {}】使用【普通模式】", userId);
+        // 如果需要 System Prompt 可以在这里添加，目前保持纯用户输入
+        return new Prompt(new UserMessage(userInput));
+    }
+
+    /**
+     * 处理图片上传并生成 MediaResource 对象
+     */
+    private MediaResource uploadAndPrepareMedia(MultipartFile imgFile) {
+        if (imgFile == null || imgFile.isEmpty()) {
+            return null;
+        }
+        try {
+            // 1. 上传图片
+            String urlStr = aliyunOssClientPutObject.upload(imgFile.getInputStream(), imgFile.getOriginalFilename());
+
+            // 2. 动态检测 MimeType，默认为 PNG
+            MimeType mimeType = MimeTypeUtils.IMAGE_PNG;
+            if (imgFile.getContentType() != null) {
+                try {
+                    mimeType = MimeTypeUtils.parseMimeType(imgFile.getContentType());
+                } catch (Exception e) {
+                    log.warn("无法解析 MIME 类型: {}, 使用默认 PNG", imgFile.getContentType());
+                }
+            }
+
+            return new MediaResource(mimeType, new URL(urlStr));
+        } catch (IOException e) {
+            log.error("图片处理失败", e);
+            throw new RuntimeException("图片上传失败", e);
+        }
+    }
+}
+
 
 
 //    public Flux<String> chatstream(ChatEntity chatEntity) {
@@ -145,103 +193,21 @@ public class ChatServiceImpl implements ChatService {
 
 
 
-    @Override
-    public String streamChat(ChatEntity chatEntity) {
-
-        String userId = chatEntity.getChatId();
-        String question = chatEntity.getUserInput();
-        // 获取前端传递的模式，如果没有则默认为直接对话
-        ChatMode mode = chatEntity.getChatMode() != null ? chatEntity.getChatMode() : ChatMode.DIRECT;
-
-        Prompt prompt;
-
-        // 使用 switch 语句根据模式选择不同的逻辑
-        switch (mode) {
-            case KNOWLEDGE_BASE:
-                log.info("【用户: {}】正在使用【知识库模式】进行提问。", userId);
-                prompt = createRagPrompt(question);
-                break;
-
-            case INTERNET_SEARCH:
-                log.info("【用户: {}】正在使用【联网搜索模式】进行提问。", userId);
-                prompt = createInternetSearchPrompt(question);
-                break;
-
-            case DIRECT:
-            default:
-                log.info("【用户: {}】正在使用【直接对话模式】进行提问。", userId);
-                prompt = new Prompt(question);
-                break;
-        }
-
-        ChatClient chatClient = newchatClientconfig.get(chatEntity.getModel());
-        //流式sse后续再做。。。。。。
-        String answer=chatClient.prompt(prompt)
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, chatEntity.getChatId()))
-                .call()
-                .content();
-        System.out.println(answer);
-        return answer;
-
-/*        stream.doOnError(throwable -> {
-                    log.error("【用户: {}】的AI流处理发生错误: {}", userId, throwable.getMessage(), throwable);
-                    SSEServer.sendMsg(userId, "抱歉，服务出现了一点问题，请稍后再试。", SSEMsgType.FINISH);
-                    SSEServer.close(userId);
-                })
-                .subscribe(
-                        content -> SSEServer.sendMsg(userId, content, SSEMsgType.ADD),
-                        error -> log.error("【用户: {}】的流订阅最终失败: {}", userId, error.getMessage()),
-                        () -> {
-                            log.info("【用户: {}】的流已成功结束。", userId);
-                            SSEServer.sendMsg(userId, "done", SSEMsgType.FINISH);
-                            SSEServer.close(userId);
-                        }
-                );*/
-    }
-
-
-    /**
-     * 创建 RAG (知识库) 模式的 Prompt
-     */
-    private Prompt createRagPrompt(String question) {
-        List<Document> relatedDocs = documentService.doSearch(question);
-        String context = "没有找到相关的知识库信息。";
-        if (!CollectionUtils.isEmpty(relatedDocs)) {
-            context = relatedDocs.stream()
-                    .map(Document::getText)
-                    .collect(Collectors.joining("\n---\n"));
-        }
-        String promptContent = RAG_PROMPT_TEMPLATE
-                .replace("{context}", context)
-                .replace("{question}", question);
-        return new Prompt(promptContent);
-    }
-
-    /**
-     * 创建联网搜索模式的 Prompt
-     */
-    private Prompt createInternetSearchPrompt(String question) {
-        // 1. 执行联网搜索
-        List<SearchResult> searchResults = searXngService.search(question);
-        String context = "未能获取到有效的网络搜索结果。";
-
-        // 2. 构建上下文
-        if (!CollectionUtils.isEmpty(searchResults)) {
-            // 将搜索结果格式化为清晰的上下文文本
-            context = searchResults.stream()
-                    .map(result -> String.format("【来源标题】: %s\n【内容摘要】: %s\n【链接】: %s",
-                            result.getTitle(),
-                            result.getContent(),
-                            result.getUrl()))
-                    .collect(Collectors.joining("\n\n---\n\n"));
-        }
-
-        // 3. 创建提示词
-        String promptContent = INTERNET_SEARCH_PROMPT_TEMPLATE
-                .replace("{context}", context)
-                .replace("{question}", question);
-        return new Prompt(promptContent);
-    }
-
-
-}
+//    @Override
+//    public String streamChat(ChatEntity chatEntity) {
+//
+//        stream.doOnError(throwable -> {
+//                    log.error("【用户: {}】的AI流处理发生错误: {}", userId, throwable.getMessage(), throwable);
+//                    SSEServer.sendMsg(userId, "抱歉，服务出现了一点问题，请稍后再试。", SSEMsgType.FINISH);
+//                    SSEServer.close(userId);
+//                })
+//                .subscribe(
+//                        content -> SSEServer.sendMsg(userId, content, SSEMsgType.ADD),
+//                        error -> log.error("【用户: {}】的流订阅最终失败: {}", userId, error.getMessage()),
+//                        () -> {
+//                            log.info("【用户: {}】的流已成功结束。", userId);
+//                            SSEServer.sendMsg(userId, "done", SSEMsgType.FINISH);
+//                            SSEServer.close(userId);
+//                        }
+//                );
+//    }

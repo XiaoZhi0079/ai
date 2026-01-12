@@ -49,9 +49,9 @@ public class ChatControl {
      * @param chatEntity 包含消息和是否使用知识库的标志
      */
     @PostMapping("/send")
-    public void chat(@RequestBody ChatEntity chatEntity) {
+    public void chat(@RequestBody ChatEntity chatEntity) throws IOException {
         // 直接将包含所有信息的实体传递给服务层
-        chatservice.streamChat(chatEntity);
+        chatservice.chat(chatEntity);
     }
 
 
