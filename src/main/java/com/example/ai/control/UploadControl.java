@@ -1,60 +1,37 @@
-//package com.example.ai.control;
-//
-//
-//
-//import com.example.ai.utils.AliyunOssClientPutObject;
-//import org.springframework.ai.chat.client.ChatClient;
-//import org.springframework.ai.chat.memory.ChatMemory;
-//import org.springframework.beans.factory.annotation.Autowired;
-//import org.springframework.beans.factory.annotation.Qualifier;
-//import org.springframework.util.MimeType;
-//import org.springframework.util.MimeTypeUtils;
-//import org.springframework.web.bind.annotation.RequestMapping;
-//import org.springframework.web.bind.annotation.RestController;
-//import org.springframework.web.multipart.MultipartFile;
-//
-//import java.io.IOException;
-//import java.net.MalformedURLException;
-//import java.net.URL;
-//
-//@RestController
-//public class UploadControl {
-//
-//
-//
-//    @Autowired
-//    private AliyunOssClientPutObject aliyunOssClientPutObject;
-//
-//
-//
-//    @RequestMapping("/chat_image")
-//    public String chatuploadimage(String userinput, String chatId, MultipartFile file) throws IOException {
-//        String url = aliyunOssClientPutObject.upload(file.getInputStream(), file.getOriginalFilename());
-//        return chatClient.prompt()
-//                .user(u -> {
-//                    try {
-//                        u.text(userinput).media(MimeTypeUtils.IMAGE_PNG, new URL(url));
-//                    } catch (MalformedURLException e) {
-//                        throw new RuntimeException(e);
-//                    }
-//                })
-//                .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, chatId))
-//                .call()
-//                .content();
-//    }
-//    @RequestMapping("/chat_audio")
-//    public String chatuploadvedio(String userinput, String chatId, MultipartFile file) throws IOException {
-//
-//        MimeType audioMimeType = MimeType.valueOf("audio/mpeg");
-//
-//        // 传给 ChatClient
-//        return chatClient.prompt()
-//                .user(u -> {
-//                        u.text(userinput).media(audioMimeType,file.getResource());
-//                })
-//                .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID, chatId))
-//                .call()
-//                .content();
-//    }
-//
-//}
+package com.example.ai.control;
+
+import com.example.ai.pojo.ImagesResponse;
+import com.example.ai.service.UploadService;
+import com.example.ai.service.impl.ChatServiceImpl;
+import com.example.ai.service.impl.UploadServiceImpl;
+import com.example.ai.utils.AliyunOssClientPutObject;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.MimeType;
+import org.springframework.util.MimeTypeUtils;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
+import java.net.URL;
+import java.util.List;
+
+
+@RestController
+@RequestMapping("/upload")
+@RequiredArgsConstructor
+@Slf4j
+public class UploadControl {
+
+    private final UploadService uploadService;
+
+    @PostMapping("/images")
+    public List<ImagesResponse> uploadImages(@RequestParam("files") List<MultipartFile> imgFiles) throws Exception {
+        return uploadService.uploadImages(imgFiles);
+    }
+
+
+}

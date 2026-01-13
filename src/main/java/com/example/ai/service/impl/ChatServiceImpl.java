@@ -3,12 +3,12 @@ package com.example.ai.service.impl;
 import com.example.ai.Tool.DateTimeTools;
 import com.example.ai.enums.ChatMode;
 import com.example.ai.pojo.ChatEntity;
+import com.example.ai.pojo.ImagesResponse;
 import com.example.ai.pojo.SearchResult;
 import com.example.ai.repository.ChatHistoryRepository;
 import com.example.ai.service.ChatService;
 import com.example.ai.service.DocumentService;
 import com.example.ai.service.SearXngService;
-import com.example.ai.utils.AliyunOssClientPutObject;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,14 +19,10 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
-import org.springframework.util.MimeTypeUtils;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
+import org.springframework.util.StringUtils;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +36,6 @@ public class ChatServiceImpl implements ChatService {
     // 优化命名：chatClientMap 更直观
     private final Map<String, ChatClient> chatClientMap;
     private final ChatHistoryRepository chatHistoryRepository;
-    private final AliyunOssClientPutObject aliyunOssClientPutObject;
     private final DocumentService documentService;
     private final SearXngService searXngService;
 
@@ -55,16 +50,21 @@ public class ChatServiceImpl implements ChatService {
         log.info("已加载 ChatClients, 可用模型: {}", chatClientMap.keySet());
     }
 
-    private record MediaResource(MimeType mimeType, URL url) {}
+    private record MediaResource(MimeType mimeType, URL url) {
+    }
 
     @Override
     public String chat(ChatEntity chatEntity) {
+
+        //获取对话ID
         String chatId = chatEntity.getChatId();
+        //获取对话模型
         String modelName = chatEntity.getModel();
-        
+
         // 记录历史（建议检查这里具体保存了什么，通常应该只保存会话元数据，内容由ChatMemory处理）
         chatHistoryRepository.save(chatId, "chat");
 
+        //获取chatClient
         ChatClient chatClient = chatClientMap.get(modelName);
         if (chatClient == null) {
             throw new IllegalArgumentException(String.format("模型不存在: '%s'。可用模型: %s", modelName, chatClientMap.keySet()));
@@ -74,16 +74,22 @@ public class ChatServiceImpl implements ChatService {
         Prompt prompt = buildPromptByMode(chatEntity);
 
         // 2. 准备图片媒体信息（如果有）
-        MediaResource media = uploadAndPrepareMedia(chatEntity.getImageFile());
+        List<ImagesResponse> images = (chatEntity.getImageFiles());
 
         // 3. 调用 AI
         return chatClient.prompt(prompt)
-                .tools(new DateTimeTools()) // 如果 DateTimeTools 无状态，建议注册为 Bean 注入，避免每次 new
+                /*.tools(new DateTimeTools())*/ // 如果 DateTimeTools 无状态，建议注册为 Bean 注入，避免每次 new
                 .user(u -> {
-                    // 如果有 PromptTemplate 生成的内容，这里不需要再 set text，Spring AI 会自动合并
-                    // 但这里主要是为了附加多模态图片
-                    if (media != null) {
-                        u.media(media.mimeType(), media.url());
+                    if (images != null) {
+                        for (ImagesResponse i : images) {
+                            if (!StringUtils.hasText(i.getImageUrls())) continue;
+                            try {
+                                u.media(i.getMimeTypes(), new URL(i.getImageUrls()));
+                            } catch (Exception e) {
+                                // 记录日志，不要让一张坏链接把整次对话弄崩
+                                 log.warn("bad image url: {}", i, e);
+                            }
+                        }
                     }
                 })
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, chatId))
@@ -95,8 +101,12 @@ public class ChatServiceImpl implements ChatService {
      * 根据聊天模式构建基础 Prompt
      */
     private Prompt buildPromptByMode(ChatEntity chatEntity) {
+
+        //获取用户姓名
         String userName = chatEntity.getUserName();
+        //获取用户输入
         String userInput = chatEntity.getUserInput();
+        //获取对话模式
         ChatMode chatMode = chatEntity.getChatMode();
 
         switch (chatMode) {
@@ -111,6 +121,9 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 
+    /**
+     * 知识库 Prompt
+     */
     private Prompt createKnowledgeBasePrompt(String userId, String userInput) {
         log.info("【用户: {}】使用【知识库模式】", userId);
         List<Document> relatedDocs = documentService.doSearch(userInput);
@@ -124,6 +137,9 @@ public class ChatServiceImpl implements ChatService {
         return template.create(Map.of("context", context, "question", userInput));
     }
 
+    /**
+     * 联网搜索 Prompt
+     */
     private Prompt createInternetSearchPrompt(String userId, String userInput) {
         log.info("【用户: {}】使用【联网搜索模式】", userId);
         List<SearchResult> searchResults = searXngService.search(userInput);
@@ -139,41 +155,15 @@ public class ChatServiceImpl implements ChatService {
         return template.create(Map.of("context", context, "question", userInput));
     }
 
+    /**
+     * 基础 Prompt
+     */
     private Prompt createDirectPrompt(String userId, String userInput) {
         log.info("【用户: {}】使用【普通模式】", userId);
-        // 如果需要 System Prompt 可以在这里添加，目前保持纯用户输入
         return new Prompt(new UserMessage(userInput));
     }
 
-    /**
-     * 处理图片上传并生成 MediaResource 对象
-     */
-    private MediaResource uploadAndPrepareMedia(MultipartFile imgFile) {
-        if (imgFile == null || imgFile.isEmpty()) {
-            return null;
-        }
-        try {
-            // 1. 上传图片
-            String urlStr = aliyunOssClientPutObject.upload(imgFile.getInputStream(), imgFile.getOriginalFilename());
-
-            // 2. 动态检测 MimeType，默认为 PNG
-            MimeType mimeType = MimeTypeUtils.IMAGE_PNG;
-            if (imgFile.getContentType() != null) {
-                try {
-                    mimeType = MimeTypeUtils.parseMimeType(imgFile.getContentType());
-                } catch (Exception e) {
-                    log.warn("无法解析 MIME 类型: {}, 使用默认 PNG", imgFile.getContentType());
-                }
-            }
-
-            return new MediaResource(mimeType, new URL(urlStr));
-        } catch (IOException e) {
-            log.error("图片处理失败", e);
-            throw new RuntimeException("图片上传失败", e);
-        }
-    }
 }
-
 
 
 //    public Flux<String> chatstream(ChatEntity chatEntity) {
@@ -189,8 +179,6 @@ public class ChatServiceImpl implements ChatService {
 //                .stream()
 //                .content();
 //    }
-
-
 
 
 //    @Override

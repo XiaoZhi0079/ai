@@ -5,6 +5,8 @@ import com.example.ai.enums.ChatMode;
 import lombok.Data;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 
 @Data
 public class ChatEntity {
@@ -19,6 +21,6 @@ public class ChatEntity {
 
     private String model;
 
-    private MultipartFile imageFile = null;
+    private List<ImagesResponse> imageFiles = null;
 
 }

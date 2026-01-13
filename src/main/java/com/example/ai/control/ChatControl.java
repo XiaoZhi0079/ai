@@ -25,7 +25,7 @@ import java.io.IOException;
 public class ChatControl {
 
     @Autowired
-    private ChatServiceImpl chatservice;
+    private ChatServiceImpl chatService;
 
 //    @Autowired
 //    private VideoService videoService;
@@ -34,7 +34,7 @@ public class ChatControl {
     @RequestMapping("/chat")
     public String chattext(@RequestBody ChatEntity chatEntity) throws IOException {
             System.out.println("Received ChatEntity: " + chatEntity);
-            return chatservice.chat(chatEntity);
+            return chatService.chat(chatEntity);
     }
 
 //    @Operation(summary = "流式文字对话")
@@ -51,7 +51,7 @@ public class ChatControl {
     @PostMapping("/send")
     public void chat(@RequestBody ChatEntity chatEntity) throws IOException {
         // 直接将包含所有信息的实体传递给服务层
-        chatservice.chat(chatEntity);
+        chatService.chat(chatEntity);
     }
 
 
