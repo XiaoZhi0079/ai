@@ -49,7 +49,6 @@ public class AliyunOssClientPutObject {
 
         try (OSSClient client = clientBuilder.build()) {
 
-
             PutObjectResult result = client.putObject(PutObjectRequest.newBuilder()
                     .bucket(bucket)
                     .key(key)

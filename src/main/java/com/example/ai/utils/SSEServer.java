@@ -2,7 +2,6 @@ package com.example.ai.utils;
 
 
 import com.example.ai.enums.SSEMsgType;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;

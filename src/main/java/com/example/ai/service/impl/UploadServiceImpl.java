@@ -22,6 +22,7 @@ public class UploadServiceImpl implements UploadService {
     private final AliyunOssClientPutObject aliyunOssClientPutObject;
 
     public List<ImagesResponse> uploadImages(@RequestParam("files") List<MultipartFile> imgFiles) throws Exception {
+
         if (imgFiles == null || imgFiles.isEmpty()) {
             return null;
         }

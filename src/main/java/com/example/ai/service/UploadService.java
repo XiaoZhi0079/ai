@@ -9,5 +9,5 @@ import java.util.List;
 
 public interface UploadService {
 
-    public List<ImagesResponse> uploadImages(@RequestParam("files") List<MultipartFile> imgFiles) throws Exception;
+    List<ImagesResponse> uploadImages(@RequestParam("files") List<MultipartFile> imgFiles) throws Exception;
 }
