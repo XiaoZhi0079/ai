@@ -20,9 +20,13 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
+import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StringUtils;
+
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
@@ -81,10 +85,13 @@ public class ChatServiceImpl implements ChatService {
                 /*.tools(new DateTimeTools())*/ // 如果 DateTimeTools 无状态，建议注册为 Bean 注入，避免每次 new
                 .user(u -> {
                     if (images != null) {
+                        int index = 1;
                         for (ImagesResponse i : images) {
-                            if (!StringUtils.hasText(i.getImageUrls())) continue;
+                            if (!StringUtils.hasText(i.getImageUrl())) continue;
                             try {
-                                u.media(i.getMimeTypes(), new URL(i.getImageUrls()));
+                                u.text("这是第"+index+"张媒体文件")
+                                .media(i.getMimeType(), new URL(i.getImageUrl()));
+                                index++;
                             } catch (Exception e) {
                                 // 记录日志，不要让一张坏链接把整次对话弄崩
                                  log.warn("bad image url: {}", i, e);
@@ -92,6 +99,7 @@ public class ChatServiceImpl implements ChatService {
                         }
                     }
                 })
+
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, chatId))
                 .call()
                 .content();

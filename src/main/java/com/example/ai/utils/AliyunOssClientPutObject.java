@@ -4,6 +4,7 @@ import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.OSSClientBuilder;
 import com.aliyun.sdk.service.oss2.credentials.CredentialsProvider;
 import com.aliyun.sdk.service.oss2.credentials.EnvironmentVariableCredentialsProvider;
+import com.aliyun.sdk.service.oss2.credentials.StaticCredentialsProvider;
 import com.aliyun.sdk.service.oss2.models.PutObjectRequest;
 import com.aliyun.sdk.service.oss2.models.PutObjectResult;
 import com.aliyun.sdk.service.oss2.transport.BinaryData;
@@ -22,14 +23,27 @@ import java.util.UUID;
 @Component
 public class AliyunOssClientPutObject {
 
-    @Value("${aliyun.oss.endpoint}")
-    String endpoint;
-    @Value("${aliyun.oss.region}")
-    String region;
-    @Value("${aliyun.oss.bucket}")
-    String bucket;
+//    @Value("${aliyun.oss.endpoint}")
+//    String endpoint;
+//    @Value("${aliyun.oss.region}")
+//    String region;
+//    @Value("${aliyun.oss.bucket}")
+//    String bucket;
+
+    private final AliyunOSSProperties aliyunOSSProperties;
+
+
 
     public String upload(InputStream content, String originalFilename) {
+
+
+        String endpoint = aliyunOSSProperties.getEndpoint();
+        String bucket= aliyunOSSProperties.getBucket();
+        String region = aliyunOSSProperties.getRegion();
+
+        //凭证
+        String accessKeyId = aliyunOSSProperties.getAccessKeyId();
+        String accessKeySecret = aliyunOSSProperties.getAccessKeySecret();
 
         //获取当前系统日期的字符串,格式为 yyyy/MM
         String dir = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
@@ -38,7 +52,14 @@ public class AliyunOssClientPutObject {
         String key = dir + "/" + newFileName;
 
 
-        CredentialsProvider provider = new EnvironmentVariableCredentialsProvider();
+        //凭证写入环境变量
+//        CredentialsProvider provider = new EnvironmentVariableCredentialsProvider();
+//        OSSClientBuilder clientBuilder = OSSClient.newBuilder()
+//                .credentialsProvider(provider)
+//                .region(region);
+
+        //凭据写入yml文件
+        CredentialsProvider provider = new StaticCredentialsProvider(accessKeyId,accessKeySecret);
         OSSClientBuilder clientBuilder = OSSClient.newBuilder()
                 .credentialsProvider(provider)
                 .region(region);

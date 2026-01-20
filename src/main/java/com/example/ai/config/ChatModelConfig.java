@@ -1,8 +1,6 @@
 package com.example.ai.config;
 
-import com.alibaba.dashscope.aigc.videosynthesis.VideoSynthesis;
-import com.alibaba.dashscope.aigc.videosynthesis.VideoSynthesisParam;
-import lombok.Data;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
