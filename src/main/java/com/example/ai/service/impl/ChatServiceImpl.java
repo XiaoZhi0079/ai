@@ -1,5 +1,6 @@
 package com.example.ai.service.impl;
 
+import com.example.ai.Factory.ChatClientFactory;
 import com.example.ai.Tool.DateTimeTools;
 import com.example.ai.enums.ChatMode;
 import com.example.ai.pojo.ChatEntity;
@@ -38,7 +39,10 @@ import java.util.stream.Collectors;
 public class ChatServiceImpl implements ChatService {
 
     // 优化命名：chatClientMap 更直观
-    private final Map<String, ChatClient> chatClientMap;
+
+    private final ChatClientFactory clientFactory;
+
+//    private final Map<String, ChatClient> chatClientMap;
     private final ChatHistoryRepository chatHistoryRepository;
     private final DocumentService documentService;
     private final SearXngService searXngService;
@@ -49,10 +53,10 @@ public class ChatServiceImpl implements ChatService {
     @Value("${prompt.INTERNET_SEARCH_PROMPT_TEMPLATE}")
     private String internetSearchPromptTemplateStr;
 
-    @PostConstruct
-    public void init() {
-        log.info("已加载 ChatClients, 可用模型: {}", chatClientMap.keySet());
-    }
+//    @PostConstruct
+//    public void init() {
+//        log.info("已加载 ChatClients, 可用模型: {}", chatClientMap.keySet());
+//    }
 
     private record MediaResource(MimeType mimeType, URL url) {
     }
@@ -69,10 +73,12 @@ public class ChatServiceImpl implements ChatService {
         chatHistoryRepository.save(chatId, "chat");
 
         //获取chatClient
-        ChatClient chatClient = chatClientMap.get(modelName);
-        if (chatClient == null) {
-            throw new IllegalArgumentException(String.format("模型不存在: '%s'。可用模型: %s", modelName, chatClientMap.keySet()));
-        }
+
+        ChatClient chatClient = clientFactory.getClient(modelName);
+//        ChatClient chatClient = chatClientMap.get(modelName);
+//        if (chatClient == null) {
+//            throw new IllegalArgumentException(String.format("模型不存在: '%s'。可用模型: %s", modelName, chatClientMap.keySet()));
+//        }
 
         // 1. 根据模式构建 Prompt 对象
         Prompt prompt = buildPromptByMode(chatEntity);
