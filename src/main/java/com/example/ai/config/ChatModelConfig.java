@@ -6,9 +6,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
@@ -30,20 +29,14 @@ import java.util.stream.Collectors;
 public class ChatModelConfig {
 
 
-    private final JdbcChatMemoryRepository chatMemoryRepository;
+    private final ChatMemoryRepository chatMemoryRepository;
 
     @Bean
     public ChatMemory chatMemory(){
-        return MessageWindowChatMemory.builder().maxMessages(50).build();
-    }
-
-    @Bean
-    public ChatMemory chatMemory2(){
-            ChatMemory chatMemory2 = MessageWindowChatMemory.builder()
-            .chatMemoryRepository(chatMemoryRepository)
-            .maxMessages(50)
-            .build();
-            return chatMemory2;
+        return MessageWindowChatMemory.builder()
+                .chatMemoryRepository(chatMemoryRepository)
+                .maxMessages(50)
+                .build();
     }
 
     @Value("${prompt.Default_System}")

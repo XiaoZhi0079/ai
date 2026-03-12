@@ -31,7 +31,7 @@ public class MessagePojo {
   private LocalDateTime careteTime;
 
 
-  // media 字段（图片、视频等链接或元数据）
+  // media 字段，图片、视频等链接或元数据
   @Column(name = "media_url")
   private String mediaUrl;
 
