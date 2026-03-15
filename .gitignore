@@ -1,4 +1,50 @@
+# ===== Java / Maven =====
+backend/target/
 target/
-.idea
-.vscode
-src/**/application.yml
+*.class
+*.jar
+*.war
+*.ear
+*.log
+*.err
+
+# ===== Spring Boot =====
+**/application-local.yml
+**/application-dev.yml
+
+# ===== Node / npm =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Vue / Vite =====
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+*.local
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===== Env / Secrets =====
+.env
+.env.*
+**/application.yml
+
+# ===== Misc =====
+*.swp
+*.swo
+*~
