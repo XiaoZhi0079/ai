@@ -2,6 +2,7 @@ package com.example.ai.Factory;
 
 import com.example.ai.config.ChatModelProperties;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ChatClientFactory{
@@ -56,7 +58,7 @@ public class ChatClientFactory{
             throw new IllegalArgumentException("未找到模型配置: " + modelName);
         }
 
-        System.out.println("🚀 正在首次初始化模型实例 [懒加载]: " + modelName);
+        log.info("正在首次初始化模型实例 [懒加载]: {}", modelName);
 
         // 2. 创建真正的模型实例
         OpenAiApi openAiApi = OpenAiApi.builder()

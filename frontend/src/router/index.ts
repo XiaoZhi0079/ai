@@ -65,13 +65,28 @@ const router = createRouter({
           meta: { title: '知识库', icon: 'UploadFilled', roles: ['ADMIN', 'TEACHER'] as Role[] }
         }
       ]
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'NotFound',
+      redirect: '/dashboard'
     }
   ]
 })
 
 router.beforeEach((to, _from, next) => {
-  const auth = localStorage.getItem('user_auth')
-  const isLoggedIn = auth ? JSON.parse(auth).token : ''
+  let isLoggedIn = ''
+  let userRole = ''
+  try {
+    const auth = localStorage.getItem('user_auth')
+    if (auth) {
+      const parsed = JSON.parse(auth)
+      isLoggedIn = parsed.token || ''
+      userRole = parsed.role || ''
+    }
+  } catch {
+    localStorage.removeItem('user_auth')
+  }
 
   if (to.meta.requiresAuth && !isLoggedIn) {
     next('/login')
@@ -81,9 +96,8 @@ router.beforeEach((to, _from, next) => {
     next('/dashboard')
     return
   }
-  if (to.meta.roles && auth) {
-    const { role } = JSON.parse(auth)
-    if (!(to.meta.roles as Role[]).includes(role)) {
+  if (to.meta.roles && isLoggedIn) {
+    if (!(to.meta.roles as Role[]).includes(userRole as Role)) {
       next('/dashboard')
       return
     }

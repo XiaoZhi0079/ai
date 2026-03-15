@@ -50,7 +50,7 @@ export const useUserStore = defineStore('user', () => {
     username.value = res.username
     role.value = res.role
     email.value = res.email
-    token.value = res.token
+    token.value = res.token || ''
     persist()
   }
 

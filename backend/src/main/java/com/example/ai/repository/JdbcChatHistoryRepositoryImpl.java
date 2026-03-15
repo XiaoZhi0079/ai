@@ -6,6 +6,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.context.annotation.Primary;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -44,6 +45,7 @@ public class JdbcChatHistoryRepositoryImpl implements ChatHistoryRepository {
     }
 
     @Override
+    @Transactional
     public void delete(String type) {
         String normalizedType = normalizeType(type);
         Long id = jdbcTemplate.query(
@@ -59,6 +61,7 @@ public class JdbcChatHistoryRepositoryImpl implements ChatHistoryRepository {
     }
 
     @Override
+    @Transactional
     public void deleteAll(String type) {
         String normalizedType = normalizeType(type);
         jdbcTemplate.update(

@@ -8,13 +8,17 @@
   </div>
 </template>
 
+<script lang="ts">
+import MarkdownIt from 'markdown-it'
+// 模块级单例，所有 ChatMessage 组件共享一个实例
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
+</script>
+
 <script setup lang="ts">
 import { computed } from 'vue'
-import MarkdownIt from 'markdown-it'
 import type { MessageVO } from '@/types'
 
 const props = defineProps<{ msg: MessageVO }>()
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const renderedContent = computed(() => {
   if (props.msg.role === 'USER') return props.msg.content

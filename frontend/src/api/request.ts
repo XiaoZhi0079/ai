@@ -8,12 +8,14 @@ const request = axios.create({
 })
 
 request.interceptors.request.use((config) => {
-  const auth = localStorage.getItem('user_auth')
-  if (auth) {
-    const { token, username, role } = JSON.parse(auth)
-    if (token) config.headers['token'] = token
-    if (username) config.headers['X-User'] = username
-    if (role) config.headers['X-Role'] = role
+  try {
+    const auth = localStorage.getItem('user_auth')
+    if (auth) {
+      const { token } = JSON.parse(auth)
+      if (token) config.headers['token'] = token
+    }
+  } catch {
+    localStorage.removeItem('user_auth')
   }
   return config
 })

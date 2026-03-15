@@ -26,7 +26,7 @@ public class MVCconfiguration implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(jwtInterceptor)
-                .addPathPatterns("/api/**");
+                .addPathPatterns("/api/**", "/ai/**", "/rag/**", "/upload/**", "/image/**");
         registry.addInterceptor(roleInterceptor)
                 .addPathPatterns("/api/**");
     }

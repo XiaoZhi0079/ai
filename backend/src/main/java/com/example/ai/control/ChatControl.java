@@ -1,41 +1,26 @@
 package com.example.ai.control;
 
 import com.example.ai.pojo.ChatEntity;
-import com.example.ai.service.impl.ChatServiceImpl;
+import com.example.ai.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-
+@Slf4j
 @RestController
 @Tag(name = "聊天控制类")
 @RequestMapping("/ai")
+@RequiredArgsConstructor
 public class ChatControl {
 
-    @Autowired
-    private ChatServiceImpl chatService;
+    private final ChatService chatService;
 
     @Operation(summary = "文本对话")
-    @RequestMapping("/chat")
-    public String chattext(@RequestBody ChatEntity chatEntity) throws IOException {
-        System.out.println("Received ChatEntity: " + chatEntity);
+    @PostMapping("/chat")
+    public String chat(@RequestBody ChatEntity chatEntity) {
+        log.debug("收到聊天请求: chatId={}, model={}, mode={}", chatEntity.getChatId(), chatEntity.getModel(), chatEntity.getChatMode());
         return chatService.chat(chatEntity);
-    }
-
-//    @Operation(summary = "流式文本对话")
-//    @RequestMapping(value="/chatstream",produces = "text/html;charset=utf-8")
-//    public Flux<String> chattextstream(ChatEntity chatEntity) throws IOException {
-//        return chatservice.chatstream(chatEntity);
-//    }
-
-    /**
-     * 统一的聊天接口
-     * @param chatEntity 包含消息和是否使用知识库的标志
-     */
-    @PostMapping("/send")
-    public void chat(@RequestBody ChatEntity chatEntity) throws IOException {
-        chatService.chat(chatEntity);
     }
 }

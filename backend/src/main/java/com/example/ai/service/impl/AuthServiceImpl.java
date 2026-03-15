@@ -64,14 +64,11 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalArgumentException("Password is required");
         }
         User user = userMapper.selectByUsername(request.getUsername());
-        if (user == null) {
-            throw new IllegalArgumentException("User not found");
+        if (user == null || !matchesPassword(request.getPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("用户名或密码错误");
         }
         if (user.getStatus() != null && user.getStatus() != 1) {
-            throw new IllegalArgumentException("User is disabled");
-        }
-        if (!matchesPassword(request.getPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("Invalid password");
+            throw new IllegalArgumentException("账号已被禁用");
         }
         Map<String, Object> claims = new HashMap<>();
         claims.put("id", user.getId());
@@ -86,9 +83,6 @@ public class AuthServiceImpl implements AuthService {
         if (stored == null) {
             return false;
         }
-        if (stored.startsWith("$2a$") || stored.startsWith("$2b$") || stored.startsWith("$2y$")) {
-            return passwordEncoder.matches(raw, stored);
-        }
-        return stored.equals(raw);
+        return passwordEncoder.matches(raw, stored);
     }
 }

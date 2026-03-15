@@ -1,7 +1,6 @@
 package com.example.ai.service.impl;
 
 import com.example.ai.Factory.ChatClientFactory;
-import com.example.ai.Tool.DateTimeTools;
 import com.example.ai.enums.ChatMode;
 import com.example.ai.pojo.ChatEntity;
 import com.example.ai.pojo.ImagesResponse;
@@ -10,7 +9,6 @@ import com.example.ai.repository.ChatHistoryRepository;
 import com.example.ai.service.ChatService;
 import com.example.ai.service.DocumentService;
 import com.example.ai.service.SearXngService;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
@@ -21,13 +19,10 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
-import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StringUtils;
 
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
@@ -41,8 +36,6 @@ public class ChatServiceImpl implements ChatService {
     // 优化命名：chatClientMap 更直观
 
     private final ChatClientFactory clientFactory;
-
-//    private final Map<String, ChatClient> chatClientMap;
     private final ChatHistoryRepository chatHistoryRepository;
     private final DocumentService documentService;
     private final SearXngService searXngService;
@@ -52,11 +45,6 @@ public class ChatServiceImpl implements ChatService {
 
     @Value("${prompt.INTERNET_SEARCH_PROMPT_TEMPLATE}")
     private String internetSearchPromptTemplateStr;
-
-//    @PostConstruct
-//    public void init() {
-//        log.info("已加载 ChatClients, 可用模型: {}", chatClientMap.keySet());
-//    }
 
     private record MediaResource(MimeType mimeType, URL url) {
     }
@@ -69,16 +57,10 @@ public class ChatServiceImpl implements ChatService {
         //获取对话模型
         String modelName = chatEntity.getModel();
 
-        // 记录历史（建议检查这里具体保存了什么，通常应该只保存会话元数据，内容由ChatMemory处理）
+        // 记录历史
         chatHistoryRepository.save(chatId, "chat");
 
-        //获取chatClient
-
         ChatClient chatClient = clientFactory.getClient(modelName);
-//        ChatClient chatClient = chatClientMap.get(modelName);
-//        if (chatClient == null) {
-//            throw new IllegalArgumentException(String.format("模型不存在: '%s'。可用模型: %s", modelName, chatClientMap.keySet()));
-//        }
 
         // 1. 根据模式构建 Prompt 对象
         Prompt prompt = buildPromptByMode(chatEntity);
@@ -178,38 +160,3 @@ public class ChatServiceImpl implements ChatService {
     }
 
 }
-
-
-//    public Flux<String> chatstream(ChatEntity chatEntity) {
-//
-//        chatHistoryRepository.save(chatEntity.getChatId(),"chat");
-//
-//        return newchatClientconfig.get(chatEntity.getModel()).mutate()
-//                        .defaultSystem(Default_System)
-//                        .build()
-//                .prompt()
-//                .user(chatEntity.getUserInput())
-//                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID,chatEntity.getChatId()))
-//                .stream()
-//                .content();
-//    }
-
-
-//    @Override
-//    public String streamChat(ChatEntity chatEntity) {
-//
-//        stream.doOnError(throwable -> {
-//                    log.error("【用户: {}】的AI流处理发生错误: {}", userId, throwable.getMessage(), throwable);
-//                    SSEServer.sendMsg(userId, "抱歉，服务出现了一点问题，请稍后再试。", SSEMsgType.FINISH);
-//                    SSEServer.close(userId);
-//                })
-//                .subscribe(
-//                        content -> SSEServer.sendMsg(userId, content, SSEMsgType.ADD),
-//                        error -> log.error("【用户: {}】的流订阅最终失败: {}", userId, error.getMessage()),
-//                        () -> {
-//                            log.info("【用户: {}】的流已成功结束。", userId);
-//                            SSEServer.sendMsg(userId, "done", SSEMsgType.FINISH);
-//                            SSEServer.close(userId);
-//                        }
-//                );
-//    }

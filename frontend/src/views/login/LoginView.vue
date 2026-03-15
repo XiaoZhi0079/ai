@@ -31,7 +31,6 @@
               <el-select v-model="registerForm.role" placeholder="选择角色" style="width: 100%">
                 <el-option label="学生" value="STUDENT" />
                 <el-option label="教师" value="TEACHER" />
-                <el-option label="管理员" value="ADMIN" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -72,24 +71,28 @@ const registerRules = {
 }
 
 async function handleLogin() {
-  await loginFormRef.value?.validate()
+  try { await loginFormRef.value?.validate() } catch { return }
   loading.value = true
   try {
     await userStore.login(loginForm)
     ElMessage.success('登录成功')
     router.push('/dashboard')
+  } catch {
+    // 错误已由全局拦截器处理
   } finally {
     loading.value = false
   }
 }
 
 async function handleRegister() {
-  await registerFormRef.value?.validate()
+  try { await registerFormRef.value?.validate() } catch { return }
   loading.value = true
   try {
     await userStore.register(registerForm)
     ElMessage.success('注册成功')
     router.push('/dashboard')
+  } catch {
+    // 错误已由全局拦截器处理
   } finally {
     loading.value = false
   }

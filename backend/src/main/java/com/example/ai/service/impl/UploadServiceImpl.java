@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -21,7 +20,7 @@ public class UploadServiceImpl implements UploadService {
 
     private final AliyunOssClientPutObject aliyunOssClientPutObject;
 
-    public List<ImagesResponse> uploadImages(@RequestParam("files") List<MultipartFile> imgFiles) throws Exception {
+    public List<ImagesResponse> uploadImages(List<MultipartFile> imgFiles) throws Exception {
 
         if (imgFiles == null || imgFiles.isEmpty()) {
             return null;

@@ -5,6 +5,7 @@ import com.example.ai.mapper.UserMapper;
 import com.example.ai.service.OperationLogService;
 import com.example.ai.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,10 +17,15 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
     private final OperationLogService operationLogService;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public User create(User user, String operator) {
         user.setId(null);
+        // 加密密码
+        if (user.getPassword() != null && !user.getPassword().isBlank()) {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
         userMapper.insert(user);
         User saved = userMapper.selectById(user.getId());
         operationLogService.log(operator, "创建用户 id=" + saved.getId());
@@ -40,7 +46,10 @@ public class UserServiceImpl implements UserService {
     public Optional<User> update(Integer id, User user, String operator) {
         return Optional.ofNullable(userMapper.selectById(id)).map(existing -> {
             existing.setUsername(user.getUsername());
-            existing.setPassword(user.getPassword());
+            // 密码非空时才更新，且需要加密
+            if (user.getPassword() != null && !user.getPassword().isBlank()) {
+                existing.setPassword(passwordEncoder.encode(user.getPassword()));
+            }
             existing.setRole(user.getRole());
             existing.setEmail(user.getEmail());
             existing.setStatus(user.getStatus());

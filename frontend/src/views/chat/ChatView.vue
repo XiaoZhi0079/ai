@@ -113,8 +113,9 @@ async function loadHistoryList() {
   try {
     const types = ['DIRECT', 'KNOWLEDGE_BASE', 'INTERNET_SEARCH']
     const allIds = new Set<string>()
-    for (const t of types) {
-      const ids = await getHistoryTypes(t)
+    // 并行请求所有类型的历史列表
+    const results = await Promise.all(types.map((t) => getHistoryTypes(t).catch(() => null)))
+    for (const ids of results) {
       if (ids) ids.forEach((id) => allIds.add(id))
     }
     historyIds.value = Array.from(allIds)

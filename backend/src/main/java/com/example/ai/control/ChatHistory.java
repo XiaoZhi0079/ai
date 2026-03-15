@@ -2,18 +2,18 @@ package com.example.ai.control;
 
 import com.example.ai.pojo.MessageVO;
 import com.example.ai.repository.ChatHistoryRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/ai/history")
+@RequiredArgsConstructor
 public class ChatHistory {
 
-    @Autowired
-    private ChatHistoryRepository chatHistoryRepository;
+    private final ChatHistoryRepository chatHistoryRepository;
     //    @RequestMapping("{type}")
 //    public List<String> get(@PathVariable("type") String type)
 //    {

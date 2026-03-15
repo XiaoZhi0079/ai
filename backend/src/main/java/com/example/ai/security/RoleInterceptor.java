@@ -17,7 +17,6 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public class RoleInterceptor implements HandlerInterceptor {
 
-    private static final String ROLE_HEADER = "X-Role";
     private final ObjectMapper objectMapper;
 
     @Override
@@ -34,11 +33,10 @@ public class RoleInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String roleHeader = request.getHeader(ROLE_HEADER);
-        String roleAttr = request.getAttribute("authRole") == null ? null : String.valueOf(request.getAttribute("authRole"));
-        String roleValue = (roleHeader == null || roleHeader.isBlank()) ? roleAttr : roleHeader;
+        // 优先从 JWT 解析出的 authRole 取值，避免客户端伪造 X-Role 头绕过权限
+        String roleValue = request.getAttribute("authRole") == null ? null : String.valueOf(request.getAttribute("authRole"));
         if (roleValue == null || roleValue.isBlank()) {
-            writeForbidden(response, "Missing role header");
+            writeForbidden(response, "Missing role");
             return false;
         }
 

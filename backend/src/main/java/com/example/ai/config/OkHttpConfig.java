@@ -3,12 +3,11 @@ package com.example.ai.config;
 import okhttp3.OkHttpClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.concurrent.TimeUnit;
 
 @Configuration
-public class OkHttpConfig implements WebMvcConfigurer {
+public class OkHttpConfig {
 
     @Bean
     public OkHttpClient okHttpClient() {
