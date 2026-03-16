@@ -6,7 +6,10 @@
       "Bash(git mv:*)",
       "Bash(git add:*)",
       "Bash(git worktree:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(python:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

@@ -1,12 +1,16 @@
 <template>
   <div class="crud-table">
     <div class="toolbar">
+      <el-input v-if="searchConfig" v-model="searchKey" :placeholder="searchConfig.placeholder || '搜索'" clearable style="width: 200px; margin-right: 12px" />
+      <el-select v-for="fc in filterConfigs" :key="fc.prop" v-model="filterValues[fc.prop]" :placeholder="fc.label" clearable style="width: 120px; margin-right: 12px">
+        <el-option v-for="opt in fc.options" :key="opt.value" :label="opt.label" :value="opt.value" />
+      </el-select>
       <el-button type="primary" @click="openDialog()">
         <el-icon><Plus /></el-icon> 新增
       </el-button>
     </div>
-    <el-table :data="tableData" border stripe v-loading="loading" style="width: 100%">
-      <el-table-column v-for="col in columns" :key="col.prop" :prop="col.prop" :label="col.label" :width="col.width" />
+    <el-table :data="filteredData" border stripe v-loading="loading" style="width: 100%">
+      <el-table-column v-for="col in tableColumns" :key="col.prop" :prop="col.prop" :label="col.label" :width="col.width" />
       <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" text size="small" @click="openDialog(row)">编辑</el-button>
@@ -39,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 
 export interface Column {
@@ -51,6 +55,17 @@ export interface Column {
   precision?: number
   formOnly?: boolean
   tableOnly?: boolean
+}
+
+export interface SearchConfig {
+  fields: string[]
+  placeholder?: string
+}
+
+export interface FilterConfig {
+  prop: string
+  label: string
+  options: { label: string; value: any }[]
 }
 
 export interface CrudApi {
@@ -65,6 +80,8 @@ const props = defineProps<{
   api: CrudApi
   defaultForm: () => Record<string, any>
   rules?: Record<string, any>
+  searchConfig?: SearchConfig
+  filterConfigs?: FilterConfig[]
 }>()
 
 const tableData = ref<any[]>([])
@@ -76,9 +93,34 @@ const formData = ref<Record<string, any>>({})
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
-const columns = props.columns.filter((c) => !c.formOnly)
+const searchKey = ref('')
+const filterValues = reactive<Record<string, any>>({})
+
+const tableColumns = props.columns.filter((c) => !c.formOnly)
 const formColumns = props.columns.filter((c) => !c.tableOnly)
 const rules = props.rules || {}
+
+const filteredData = computed(() => {
+  let data = tableData.value
+  if (searchKey.value && props.searchConfig) {
+    const keyword = searchKey.value.toLowerCase()
+    data = data.filter((row: any) =>
+      props.searchConfig!.fields.some((field) => {
+        const val = row[field]
+        return val != null && String(val).toLowerCase().includes(keyword)
+      })
+    )
+  }
+  if (props.filterConfigs) {
+    for (const fc of props.filterConfigs) {
+      const selected = filterValues[fc.prop]
+      if (selected != null && selected !== '') {
+        data = data.filter((row: any) => row[fc.prop] === selected)
+      }
+    }
+  }
+  return data
+})
 
 async function fetchData() {
   loading.value = true
@@ -131,5 +173,5 @@ onMounted(fetchData)
 
 <style scoped>
 .crud-table { padding: 20px; }
-.toolbar { margin-bottom: 16px; }
+.toolbar { margin-bottom: 16px; display: flex; align-items: center; }
 </style>

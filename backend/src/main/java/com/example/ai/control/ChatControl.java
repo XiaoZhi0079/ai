@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+
 @Slf4j
 @RestController
 @Tag(name = "聊天控制类")
@@ -19,7 +21,7 @@ public class ChatControl {
 
     @Operation(summary = "文本对话")
     @PostMapping("/chat")
-    public String chat(@RequestBody ChatEntity chatEntity) {
+    public String chat(@RequestBody ChatEntity chatEntity) throws IOException {
         log.debug("收到聊天请求: chatId={}, model={}, mode={}", chatEntity.getChatId(), chatEntity.getModel(), chatEntity.getChatMode());
         return chatService.chat(chatEntity);
     }

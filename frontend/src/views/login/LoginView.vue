@@ -33,6 +33,9 @@
                 <el-option label="教师" value="TEACHER" />
               </el-select>
             </el-form-item>
+            <el-form-item v-if="registerForm.role === 'TEACHER'" prop="registrationKey">
+              <el-input v-model="registerForm.registrationKey" prefix-icon="Key" placeholder="注册密钥" />
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" class="login-btn" :loading="loading" @click="handleRegister">注 册</el-button>
             </el-form-item>
@@ -57,7 +60,7 @@ const loginFormRef = ref<FormInstance>()
 const registerFormRef = ref<FormInstance>()
 
 const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', password: '', email: '', role: 'STUDENT' as const })
+const registerForm = reactive({ username: '', password: '', email: '', role: 'STUDENT' as const, registrationKey: '' })
 
 const loginRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -67,7 +70,8 @@ const registerRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 4, message: '密码至少4位', trigger: 'blur' }],
   email: [{ required: true, message: '请输入邮箱', trigger: 'blur' }, { type: 'email' as const, message: '邮箱格式不正确', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }]
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  registrationKey: [{ required: true, message: '请输入注册密钥', trigger: 'blur' }]
 }
 
 async function handleLogin() {

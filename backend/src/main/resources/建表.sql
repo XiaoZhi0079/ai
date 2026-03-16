@@ -99,6 +99,21 @@ CREATE TABLE operation_logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'created time'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='operation logs';
 
+/* 教师注册密钥表 */
+CREATE TABLE registration_keys (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    key_value  VARCHAR(64)  NOT NULL UNIQUE,
+    used       TINYINT      NOT NULL DEFAULT 0  COMMENT '0=未使用, 1=已使用',
+    used_by    INT           NULL               COMMENT '使用者 user_id',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    used_at    DATETIME      NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='教师注册密钥表';
 
-
-
+/* 知识库文档元信息表 */
+CREATE TABLE rag_documents (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    file_name   VARCHAR(255) NOT NULL COMMENT '原始文件名',
+    oss_url     VARCHAR(500) NOT NULL COMMENT 'OSS 访问地址',
+    uploaded_by INT          NULL     COMMENT '上传者 user_id',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库文档元信息';

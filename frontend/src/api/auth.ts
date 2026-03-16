@@ -8,3 +8,7 @@ export function login(data: LoginRequest): Promise<AuthResponse> {
 export function register(data: RegisterRequest): Promise<AuthResponse> {
   return request.post('/auth/register', data)
 }
+
+export function generateRegistrationKey(): Promise<{ key: string }> {
+  return request.post('/api/registration-key')
+}

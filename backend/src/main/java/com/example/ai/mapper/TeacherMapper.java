@@ -9,8 +9,8 @@ import java.util.List;
 public interface TeacherMapper {
 
     @Insert("""
-            INSERT INTO teachers (user_id, name, department, title, research_field, office_address, created_at, updated_at)
-            VALUES (#{userId}, #{name}, #{department}, #{title}, #{researchField}, #{officeAddress}, NOW(), NOW())
+            INSERT INTO teachers (user_id, name, gender, department, title, research_field, office_address, created_at, updated_at)
+            VALUES (#{userId}, #{name}, #{gender}, #{department}, #{title}, #{researchField}, #{officeAddress}, NOW(), NOW())
             """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Teacher teacher);
@@ -19,6 +19,7 @@ public interface TeacherMapper {
             UPDATE teachers
             SET user_id = #{userId},
                 name = #{name},
+                gender = #{gender},
                 department = #{department},
                 title = #{title},
                 research_field = #{researchField},
@@ -32,7 +33,7 @@ public interface TeacherMapper {
     int deleteById(Integer id);
 
     @Select("""
-            SELECT id, user_id AS userId, name, department, title,
+            SELECT id, user_id AS userId, name, gender, department, title,
                    research_field AS researchField, office_address AS officeAddress,
                    created_at AS createdAt, updated_at AS updatedAt
             FROM teachers
@@ -41,7 +42,7 @@ public interface TeacherMapper {
     Teacher selectById(Integer id);
 
     @Select("""
-            SELECT id, user_id AS userId, name, department, title,
+            SELECT id, user_id AS userId, name, gender, department, title,
                    research_field AS researchField, office_address AS officeAddress,
                    created_at AS createdAt, updated_at AS updatedAt
             FROM teachers

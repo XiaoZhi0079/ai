@@ -7,3 +7,11 @@ export function uploadRagDocument(file: File): Promise<any> {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
+
+export function getRagDocuments(): Promise<any[]> {
+  return request.get('/rag/documents')
+}
+
+export function deleteRagDocument(id: number): Promise<any> {
+  return request.delete(`/rag/documents/${id}`)
+}

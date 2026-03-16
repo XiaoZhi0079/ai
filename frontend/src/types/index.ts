@@ -17,6 +17,7 @@ export interface RegisterRequest {
   password: string
   email: string
   role?: Role
+  registrationKey?: string
 }
 
 export interface AuthResponse {
@@ -70,6 +71,7 @@ export interface Teacher {
   id?: number
   userId?: number
   name: string
+  gender: string
   department: string
   title: string
   researchField: string
@@ -82,6 +84,7 @@ export interface Student {
   id?: number
   userId?: number
   name: string
+  gender: string
   grade: number
   major: string
   className: string

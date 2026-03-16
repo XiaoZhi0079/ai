@@ -10,6 +10,7 @@ public class Teacher {
     private Integer id;
     private Integer userId;
     private String name;
+    private String gender;
     private String department;
     private String title;
     private String researchField;

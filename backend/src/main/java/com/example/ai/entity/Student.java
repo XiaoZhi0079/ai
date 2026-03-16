@@ -10,6 +10,7 @@ public class Student {
     private Integer id;
     private Integer userId;
     private String name;
+    private String gender;
     private Integer grade;
     private String major;
     private String className;

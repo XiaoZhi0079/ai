@@ -9,8 +9,8 @@ import java.util.List;
 public interface StudentMapper {
 
     @Insert("""
-            INSERT INTO students (user_id, name, grade, major, class_name, dormitory, guardian_phone, created_at, updated_at)
-            VALUES (#{userId}, #{name}, #{grade}, #{major}, #{className}, #{dormitory}, #{guardianPhone}, NOW(), NOW())
+            INSERT INTO students (user_id, name, gender, grade, major, class_name, dormitory, guardian_phone, created_at, updated_at)
+            VALUES (#{userId}, #{name}, #{gender}, #{grade}, #{major}, #{className}, #{dormitory}, #{guardianPhone}, NOW(), NOW())
             """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(Student student);
@@ -19,6 +19,7 @@ public interface StudentMapper {
             UPDATE students
             SET user_id = #{userId},
                 name = #{name},
+                gender = #{gender},
                 grade = #{grade},
                 major = #{major},
                 class_name = #{className},
@@ -33,7 +34,7 @@ public interface StudentMapper {
     int deleteById(Integer id);
 
     @Select("""
-            SELECT id, user_id AS userId, name, grade, major,
+            SELECT id, user_id AS userId, name, gender, grade, major,
                    class_name AS className, dormitory, guardian_phone AS guardianPhone,
                    created_at AS createdAt, updated_at AS updatedAt
             FROM students
@@ -42,7 +43,7 @@ public interface StudentMapper {
     Student selectById(Integer id);
 
     @Select("""
-            SELECT id, user_id AS userId, name, grade, major,
+            SELECT id, user_id AS userId, name, gender, grade, major,
                    class_name AS className, dormitory, guardian_phone AS guardianPhone,
                    created_at AS createdAt, updated_at AS updatedAt
             FROM students

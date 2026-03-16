@@ -1,10 +1,11 @@
 <template>
-  <CrudTable :columns="columns" :api="api" :default-form="defaultForm" :rules="rules" />
+  <CrudTable :columns="columns" :api="api" :default-form="defaultForm" :rules="rules"
+    :search-config="searchConfig" />
 </template>
 
 <script setup lang="ts">
 import CrudTable from '@/components/CrudTable.vue'
-import type { Column } from '@/components/CrudTable.vue'
+import type { Column, SearchConfig } from '@/components/CrudTable.vue'
 import { createCrudApi } from '@/api/crud'
 import type { Course } from '@/types'
 
@@ -20,6 +21,8 @@ const columns: Column[] = [
   { prop: 'schedule', label: '上课时间' },
   { prop: 'description', label: '描述', type: 'textarea' }
 ]
+
+const searchConfig: SearchConfig = { fields: ['courseName'], placeholder: '搜索课程名称' }
 
 const rules = {
   courseName: [{ required: true, message: '请输入课程名称', trigger: 'blur' }],
