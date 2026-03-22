@@ -11,6 +11,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import CrudTable from '@/components/CrudTable.vue'
 import type { Column, FilterConfig, SearchConfig } from '@/components/CrudTable.vue'
 import { createCrudApi } from '@/api/crud'
@@ -30,17 +31,20 @@ const gradeOptions = [2021, 2022, 2023, 2024, 2025, 2026].map((grade) => ({
   value: grade
 }))
 
-const columns: Column[] = [
-  { prop: 'id', label: 'ID', width: 60, tableOnly: true },
-  { prop: 'userId', label: '用户ID', type: 'number', formOnly: true },
-  { prop: 'name', label: '姓名' },
-  { prop: 'gender', label: '性别', type: 'select', options: genderOptions },
-  { prop: 'grade', label: '年级', type: 'select', options: gradeOptions },
-  { prop: 'major', label: '专业' },
-  { prop: 'className', label: '班级' },
-  { prop: 'dormitory', label: '宿舍', formOnly: true },
-  { prop: 'guardianPhone', label: '监护人电话', formOnly: true }
-]
+const columns = computed<Column[]>(() => {
+  const isStudent = userStore.role === 'STUDENT'
+  return [
+    { prop: 'id', label: 'ID', width: 60, tableOnly: true },
+    { prop: 'userId', label: '用户ID', type: 'number', formOnly: true },
+    { prop: 'name', label: '姓名' },
+    { prop: 'gender', label: '性别', type: 'select', options: genderOptions },
+    { prop: 'grade', label: '年级', type: 'select', options: gradeOptions },
+    { prop: 'major', label: '专业' },
+    { prop: 'className', label: '班级' },
+    { prop: 'dormitory', label: '宿舍', formOnly: isStudent },
+    { prop: 'guardianPhone', label: '电话', formOnly: isStudent }
+  ]
+})
 
 const searchConfig: SearchConfig = {
   fields: ['name', 'major', 'className'],

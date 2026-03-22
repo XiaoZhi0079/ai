@@ -6,7 +6,7 @@
     :rules="rules"
     :search-config="searchConfig"
     :filter-configs="filterConfigs"
-    :readonly="userStore.role === 'STUDENT'"
+    :readonly="userStore.role !== 'ADMIN'"
   />
 </template>
 

@@ -19,7 +19,7 @@ public class TeacherController {
 
     private final TeacherService teacherService;
 
-    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @RoleRequired({Role.ADMIN})
     @PostMapping
     public LeeResult<Teacher> create(HttpServletRequest request,
                                      @RequestBody Teacher teacher) {
@@ -40,7 +40,7 @@ public class TeacherController {
                 .orElseGet(() -> LeeResult.fail("Teacher not found"));
     }
 
-    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @RoleRequired({Role.ADMIN})
     @PutMapping("/{id}")
     public LeeResult<Teacher> update(HttpServletRequest request,
                                      @PathVariable Integer id,
@@ -50,7 +50,7 @@ public class TeacherController {
                 .orElseGet(() -> LeeResult.fail("Teacher not found"));
     }
 
-    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @RoleRequired({Role.ADMIN})
     @DeleteMapping("/{id}")
     public LeeResult<Void> delete(HttpServletRequest request,
                                   @PathVariable Integer id) {
