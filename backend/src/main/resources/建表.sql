@@ -115,5 +115,17 @@ CREATE TABLE rag_documents (
     file_name   VARCHAR(255) NOT NULL COMMENT '原始文件名',
     oss_url     VARCHAR(500) NOT NULL COMMENT 'OSS 访问地址',
     uploaded_by INT          NULL     COMMENT '上传者 user_id',
+    owner_user_id INT        NULL     COMMENT '私有知识库归属 user_id，公有库为空',
+    knowledge_scope VARCHAR(16) NOT NULL DEFAULT 'PRIVATE' COMMENT '知识库范围: PUBLIC/PRIVATE',
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库文档元信息';
+
+CREATE TABLE rag_ocr_user_settings (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT NOT NULL UNIQUE COMMENT '用户ID',
+    base_url    VARCHAR(255) NULL COMMENT '用户自定义OCR baseUrl',
+    api_key     VARCHAR(255) NULL COMMENT '用户自定义OCR apiKey',
+    model       VARCHAR(128) NULL COMMENT '用户自定义OCR模型名',
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户OCR模型设置';

@@ -1,5 +1,6 @@
 package com.example.ai.repository;
 
+import com.example.ai.pojo.ConversationItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
@@ -19,29 +20,37 @@ public class JdbcChatHistoryRepositoryImpl implements ChatHistoryRepository {
     private final ChatMemory chatMemory;
 
     @Override
-    public void save(String chatId, String type) {
+    public void save(String chatId, String type, Long userId, String title) {
         if (chatId == null || chatId.isBlank()) {
             return;
         }
         String normalizedType = normalizeType(type);
         String sql = """
-                INSERT INTO conversations (conversation_uid, type, updated_time)
-                VALUES (?, ?, NOW())
-                ON DUPLICATE KEY UPDATE type = VALUES(type), updated_time = NOW()
+                INSERT INTO conversations (conversation_uid, type, user_id, title, updated_time)
+                VALUES (?, ?, ?, ?, NOW())
+                ON DUPLICATE KEY UPDATE type = VALUES(type),
+                    user_id = COALESCE(user_id, VALUES(user_id)),
+                    title = COALESCE(title, VALUES(title)),
+                    updated_time = NOW()
                 """;
-        jdbcTemplate.update(sql, chatId, normalizedType);
+        jdbcTemplate.update(sql, chatId, normalizedType, userId, title);
     }
 
     @Override
-    public List<String> get(String type) {
-        String normalizedType = normalizeType(type);
+    public List<ConversationItem> getByUserId(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
         String sql = """
-                SELECT conversation_uid
+                SELECT conversation_uid, title
                 FROM conversations
-                WHERE type = ?
+                WHERE user_id = ?
                 ORDER BY updated_time DESC
                 """;
-        return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("conversation_uid"), normalizedType);
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new ConversationItem(
+                rs.getString("conversation_uid"),
+                rs.getString("title")
+        ), userId);
     }
 
     @Override

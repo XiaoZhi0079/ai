@@ -25,26 +25,14 @@ public class AuthController {
 
     @PostMapping("/auth/register")
     public LeeResult<AuthResponse> register(HttpServletRequest request,
-                                            @RequestBody RegisterRequest requestBody,
-                                            @RequestHeader(value = "X-User", required = false) String operator,
-                                            @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return LeeResult.ok(authService.register(requestBody, OperatorResolver.resolve(request, operator, role)));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                            @RequestBody RegisterRequest requestBody) {
+        return LeeResult.ok(authService.register(requestBody, OperatorResolver.resolve(request)));
     }
 
     @PostMapping("/auth/login")
     public LeeResult<AuthResponse> login(HttpServletRequest request,
-                                         @RequestBody LoginRequest requestBody,
-                                         @RequestHeader(value = "X-User", required = false) String operator,
-                                         @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return LeeResult.ok(authService.login(requestBody, OperatorResolver.resolve(request, operator, role)));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                         @RequestBody LoginRequest requestBody) {
+        return LeeResult.ok(authService.login(requestBody, OperatorResolver.resolve(request)));
     }
 
     @PostMapping("/api/registration-key")

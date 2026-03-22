@@ -4,9 +4,7 @@ import com.example.ai.config.ChatModelProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
@@ -22,8 +20,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatClientFactory{
 
     private final ChatModelProperties chatModelProperties;
-    private final ChatMemory chatMemory; // 注入你配置好的 chatMemory bean
-
     @Value("${prompt.Default_System}")
     private String defaultSystem;
 
@@ -78,10 +74,7 @@ public class ChatClientFactory{
         // 3. 构建并返回 ChatClient
         return ChatClient.builder(chatModel)
                 .defaultSystem(defaultSystem)
-                .defaultAdvisors(
-                        new SimpleLoggerAdvisor(),
-                        MessageChatMemoryAdvisor.builder(chatMemory).build()
-                )
+                .defaultAdvisors(new SimpleLoggerAdvisor())
                 .build();
     }
 }

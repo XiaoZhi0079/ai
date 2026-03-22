@@ -29,9 +29,10 @@ public class UploadServiceImpl implements UploadService {
         for (MultipartFile file : imgFiles) {
             //上传图片
             String urlStr = aliyunOssClientPutObject.upload(file.getInputStream(), file.getOriginalFilename());
-            String pre = "预览";
+            String previewUrl = urlStr;
             MimeType mt = ImageMimeDetector.detect(file);
-            ImagesResponse imagesResponse = new ImagesResponse(urlStr,pre,mt);
+            String mime = mt == null ? null : mt.toString();
+            ImagesResponse imagesResponse = new ImagesResponse(urlStr, previewUrl, mime);
             imagesResponseslist.add(imagesResponse);
         }
         return imagesResponseslist;

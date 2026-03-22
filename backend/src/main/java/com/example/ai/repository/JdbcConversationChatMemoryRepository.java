@@ -19,6 +19,10 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import org.springframework.context.annotation.Primary;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.MimeType;
+import org.springframework.util.MimeTypeUtils;
+import org.springframework.util.StringUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.net.URI;
 import java.sql.PreparedStatement;
@@ -79,7 +83,9 @@ public class JdbcConversationChatMemoryRepository implements ChatMemoryRepositor
         if (conversationPk == null) {
             return;
         }
-        int nextSequence = nextSequence(conversationPk);
+        // Replace existing messages to avoid duplicate history growth when the full context is saved each time.
+        jdbcTemplate.update("DELETE FROM messages WHERE conversation_id = ?", conversationPk);
+        int nextSequence = 1;
         String sql = """
                 INSERT INTO messages (conversation_id, sender, content, image_url, media_meta, sequence)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -136,15 +142,6 @@ public class JdbcConversationChatMemoryRepository implements ChatMemoryRepositor
         }
     }
 
-    private int nextSequence(Long conversationPk) {
-        Integer max = jdbcTemplate.queryForObject(
-                "SELECT COALESCE(MAX(sequence), 0) FROM messages WHERE conversation_id = ?",
-                Integer.class,
-                conversationPk
-        );
-        return (max == null ? 0 : max) + 1;
-    }
-
     private String normalizeMessageType(MessageType type) {
         if (type == null) {
             return MessageType.ASSISTANT.getValue();
@@ -155,9 +152,14 @@ public class JdbcConversationChatMemoryRepository implements ChatMemoryRepositor
     private Message toMessage(String sender, String content, String imageUrl, String mediaMeta) {
         MessageType type = resolveMessageType(sender);
         String safeText = content == null ? "" : content;
+        List<Media> mediaList = buildMediaList(imageUrl, mediaMeta);
         return switch (type) {
-            case USER -> new UserMessage(safeText);
-            case ASSISTANT -> new AssistantMessage(safeText);
+            case USER -> mediaList.isEmpty()
+                    ? new UserMessage(safeText)
+                    : UserMessage.builder().text(safeText).media(mediaList).build();
+            case ASSISTANT -> mediaList.isEmpty()
+                    ? new AssistantMessage(safeText)
+                    : AssistantMessage.builder().content(safeText).media(mediaList).build();
             case SYSTEM -> new SystemMessage(safeText);
             case TOOL -> new SystemMessage(safeText);
         };
@@ -183,11 +185,29 @@ public class JdbcConversationChatMemoryRepository implements ChatMemoryRepositor
         if (!(message instanceof MediaContent mediaContent)) {
             return null;
         }
+        List<String> urls = new ArrayList<>();
         for (Media media : mediaContent.getMedia()) {
-            Object data = media.getData();
-            if (data instanceof URI uri) {
-                return uri.toString();
+            String url = resolveMediaUrl(media);
+            if (url != null) {
+                urls.add(url);
             }
+        }
+        if (urls.isEmpty()) {
+            return null;
+        }
+        return String.join(",", urls);
+    }
+
+    private String resolveMediaUrl(Media media) {
+        Object data = media.getData();
+        if (data instanceof URI uri) {
+            return uri.toString();
+        }
+        if (data instanceof java.net.URL url) {
+            return url.toString();
+        }
+        if (data instanceof String str && str.startsWith("http")) {
+            return str;
         }
         return null;
     }
@@ -210,11 +230,9 @@ public class JdbcConversationChatMemoryRepository implements ChatMemoryRepositor
                 if (media.getName() != null) {
                     m.put("name", media.getName());
                 }
-                Object data = media.getData();
-                if (data instanceof URI uri) {
-                    m.put("uri", uri.toString());
-                } else if (data != null) {
-                    m.put("dataType", data.getClass().getName());
+                String url = resolveMediaUrl(media);
+                if (url != null) {
+                    m.put("uri", url);
                 }
                 mediaList.add(m);
             }
@@ -231,5 +249,42 @@ public class JdbcConversationChatMemoryRepository implements ChatMemoryRepositor
             log.warn("Failed to serialize media metadata", e);
             return null;
         }
+    }
+
+    private List<Media> buildMediaList(String imageUrl, String mediaMeta) {
+        List<Media> mediaList = new ArrayList<>();
+        if (StringUtils.hasText(mediaMeta)) {
+            try {
+                JsonNode root = objectMapper.readTree(mediaMeta);
+                JsonNode media = root.path("media");
+                if (media.isArray()) {
+                    for (JsonNode node : media) {
+                        String uri = node.path("uri").asText(null);
+                        if (!StringUtils.hasText(uri)) continue;
+                        String mt = node.path("mimeType").asText(null);
+                        MimeType mimeType = StringUtils.hasText(mt)
+                                ? MimeTypeUtils.parseMimeType(mt)
+                                : MimeTypeUtils.APPLICATION_OCTET_STREAM;
+                        mediaList.add(new Media(mimeType, URI.create(uri)));
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Failed to parse media_meta, fallback to image_url", e);
+            }
+        }
+        if (!mediaList.isEmpty()) {
+            return mediaList;
+        }
+        if (!StringUtils.hasText(imageUrl)) {
+            return List.of();
+        }
+        String[] parts = imageUrl.split(",");
+        for (String part : parts) {
+            String url = part.trim();
+            if (!url.isEmpty()) {
+                mediaList.add(new Media(MimeTypeUtils.APPLICATION_OCTET_STREAM, URI.create(url)));
+            }
+        }
+        return mediaList;
     }
 }

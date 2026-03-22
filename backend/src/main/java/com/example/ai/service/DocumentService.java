@@ -7,7 +7,11 @@ import java.util.List;
 
 public interface DocumentService {
 
-    void loadText(Resource resource, String fileName);
+    void loadText(Resource resource, String fileName, Integer docId, String knowledgeScope, Integer ownerUserId);
 
-    List<Document> doSearch(String question);
+    void loadTextContent(String text, String fileName, Integer docId, String knowledgeScope, Integer ownerUserId);
+
+    List<Document> doSearch(String question, Long userId);
+
+    void deleteByDocumentId(Integer docId);
 }

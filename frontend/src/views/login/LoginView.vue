@@ -51,6 +51,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import type { Role } from '@/types'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -60,7 +61,13 @@ const loginFormRef = ref<FormInstance>()
 const registerFormRef = ref<FormInstance>()
 
 const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive({ username: '', password: '', email: '', role: 'STUDENT' as const, registrationKey: '' })
+const registerForm = reactive<{ username: string; password: string; email: string; role: Role; registrationKey: string }>({
+  username: '',
+  password: '',
+  email: '',
+  role: 'STUDENT',
+  registrationKey: ''
+})
 
 const loginRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],

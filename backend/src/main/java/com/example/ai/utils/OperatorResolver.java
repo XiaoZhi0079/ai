@@ -5,6 +5,12 @@ import jakarta.servlet.http.HttpServletRequest;
 public final class OperatorResolver {
     private OperatorResolver() {}
 
+    public static String resolve(HttpServletRequest request) {
+        String userHeader = request == null ? null : request.getHeader("X-User");
+        String roleHeader = request == null ? null : request.getHeader("X-Role");
+        return resolve(request, userHeader, roleHeader);
+    }
+
     public static String resolve(HttpServletRequest request, String userHeader, String roleHeader) {
         if (userHeader != null && !userHeader.isBlank()) {
             return userHeader.trim();

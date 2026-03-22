@@ -1,7 +1,9 @@
 package com.example.ai.control;
 
+import com.example.ai.pojo.ConversationItem;
 import com.example.ai.pojo.MessageVO;
 import com.example.ai.repository.ChatHistoryRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.web.bind.annotation.*;
@@ -14,20 +16,27 @@ import java.util.List;
 public class ChatHistory {
 
     private final ChatHistoryRepository chatHistoryRepository;
-    //    @RequestMapping("{type}")
-//    public List<String> get(@PathVariable("type") String type)
-//    {
-//        return chatHistoryRepository.get(type);
-//    }
-    @GetMapping("type/{type}")
-    public List<String> get(@PathVariable("type") String type)
-    {
-        return chatHistoryRepository.get(type);
+
+    @GetMapping
+    public List<ConversationItem> get(HttpServletRequest request) {
+        Long userId = resolveUserId(request);
+        return chatHistoryRepository.getByUserId(userId);
     }
+
     @GetMapping("chat/{chatId}")
-    public List<MessageVO> getbyid(@PathVariable("chatId") String chatId)
-    {
+    public List<MessageVO> getbyid(@PathVariable("chatId") String chatId) {
         List<Message> messages = chatHistoryRepository.getbyid(chatId);
         return messages.stream().map(MessageVO::new).toList();
+    }
+
+    private Long resolveUserId(HttpServletRequest request) {
+        String authUserId = (String) request.getAttribute("authUserId");
+        if (authUserId != null) {
+            try {
+                return Long.parseLong(authUserId);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
     }
 }

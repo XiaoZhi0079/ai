@@ -23,10 +23,8 @@ public class UserController {
     @RoleRequired({Role.ADMIN})
     @PostMapping
     public LeeResult<UserView> create(HttpServletRequest request,
-                                      @RequestBody User user,
-                                      @RequestHeader(value = "X-User", required = false) String operator,
-                                      @RequestHeader(value = "X-Role", required = false) String role) {
-        User saved = userService.create(user, OperatorResolver.resolve(request, operator, role));
+                                      @RequestBody User user) {
+        User saved = userService.create(user, OperatorResolver.resolve(request));
         return LeeResult.ok(toView(saved));
     }
 
@@ -49,10 +47,8 @@ public class UserController {
     @PutMapping("/{id}")
     public LeeResult<UserView> update(HttpServletRequest request,
                                       @PathVariable Integer id,
-                                      @RequestBody User user,
-                                      @RequestHeader(value = "X-User", required = false) String operator,
-                                      @RequestHeader(value = "X-Role", required = false) String role) {
-        return userService.update(id, user, OperatorResolver.resolve(request, operator, role))
+                                      @RequestBody User user) {
+        return userService.update(id, user, OperatorResolver.resolve(request))
                 .map(saved -> LeeResult.ok(toView(saved)))
                 .orElseGet(() -> LeeResult.fail("User not found"));
     }
@@ -60,10 +56,8 @@ public class UserController {
     @RoleRequired({Role.ADMIN})
     @DeleteMapping("/{id}")
     public LeeResult<Void> delete(HttpServletRequest request,
-                                  @PathVariable Integer id,
-                                  @RequestHeader(value = "X-User", required = false) String operator,
-                                  @RequestHeader(value = "X-Role", required = false) String role) {
-        boolean deleted = userService.delete(id, OperatorResolver.resolve(request, operator, role));
+                                  @PathVariable Integer id) {
+        boolean deleted = userService.delete(id, OperatorResolver.resolve(request));
         return deleted ? LeeResult.ok() : LeeResult.fail("User not found");
     }
 

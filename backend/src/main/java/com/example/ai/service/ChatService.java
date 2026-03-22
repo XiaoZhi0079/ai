@@ -6,5 +6,5 @@ import java.io.IOException;
 
 public interface ChatService {
 
-    public String chat(ChatEntity chatEntity) throws IOException;
+    String chat(ChatEntity chatEntity, Long userId) throws IOException;
 }

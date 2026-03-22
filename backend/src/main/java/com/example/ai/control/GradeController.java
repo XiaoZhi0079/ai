@@ -22,23 +22,17 @@ public class GradeController {
     @RoleRequired({Role.ADMIN, Role.TEACHER})
     @PostMapping
     public LeeResult<Grade> create(HttpServletRequest request,
-                                   @RequestBody Grade grade,
-                                   @RequestHeader(value = "X-User", required = false) String operator,
-                                   @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return LeeResult.ok(gradeService.create(grade, OperatorResolver.resolve(request, operator, role)));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                   @RequestBody Grade grade) {
+        return LeeResult.ok(gradeService.create(grade, OperatorResolver.resolve(request)));
     }
 
-    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @RoleRequired({Role.ADMIN, Role.TEACHER, Role.STUDENT})
     @GetMapping
     public LeeResult<List<Grade>> list() {
         return LeeResult.ok(gradeService.list());
     }
 
-    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @RoleRequired({Role.ADMIN, Role.TEACHER, Role.STUDENT})
     @GetMapping("/{id}")
     public LeeResult<Grade> get(@PathVariable Integer id) {
         return gradeService.get(id)
@@ -50,25 +44,17 @@ public class GradeController {
     @PutMapping("/{id}")
     public LeeResult<Grade> update(HttpServletRequest request,
                                    @PathVariable Integer id,
-                                   @RequestBody Grade grade,
-                                   @RequestHeader(value = "X-User", required = false) String operator,
-                                   @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return gradeService.update(id, grade, OperatorResolver.resolve(request, operator, role))
-                    .map(LeeResult::ok)
-                    .orElseGet(() -> LeeResult.fail("Grade not found"));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                   @RequestBody Grade grade) {
+        return gradeService.update(id, grade, OperatorResolver.resolve(request))
+                .map(LeeResult::ok)
+                .orElseGet(() -> LeeResult.fail("Grade not found"));
     }
 
     @RoleRequired({Role.ADMIN, Role.TEACHER})
     @DeleteMapping("/{id}")
     public LeeResult<Void> delete(HttpServletRequest request,
-                                  @PathVariable Integer id,
-                                  @RequestHeader(value = "X-User", required = false) String operator,
-                                  @RequestHeader(value = "X-Role", required = false) String role) {
-        boolean deleted = gradeService.delete(id, OperatorResolver.resolve(request, operator, role));
+                                  @PathVariable Integer id) {
+        boolean deleted = gradeService.delete(id, OperatorResolver.resolve(request));
         return deleted ? LeeResult.ok() : LeeResult.fail("Grade not found");
     }
 }

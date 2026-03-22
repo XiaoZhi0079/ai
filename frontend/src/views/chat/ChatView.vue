@@ -1,102 +1,128 @@
 <template>
   <div class="chat-container">
-    <!-- Left sidebar: history -->
     <div class="chat-sidebar">
       <div class="sidebar-header">
         <el-button type="primary" size="small" @click="newChat">
-          <el-icon><Plus /></el-icon> 新对话
+          <el-icon><Plus /></el-icon> {{ texts.newChat }}
         </el-button>
       </div>
+
       <div class="history-list">
         <div
-          v-for="id in historyIds"
-          :key="id"
-          :class="['history-item', { active: id === currentChatId }]"
-          @click="loadChat(id)"
+          v-for="item in historyItems"
+          :key="item.chatId"
+          :class="['history-item', { active: item.chatId === currentChatId }]"
+          @click="loadChat(item.chatId)"
         >
           <el-icon><ChatLineSquare /></el-icon>
-          <span class="history-id">{{ id.substring(0, 16) }}...</span>
+          <span class="history-id">{{ item.title || item.chatId.substring(0, 16) + '...' }}</span>
         </div>
-        <el-empty v-if="historyIds.length === 0" description="暂无历史" :image-size="60" />
+        <el-empty v-if="historyItems.length === 0" :description="texts.noHistory" :image-size="60" />
       </div>
     </div>
 
-    <!-- Right: chat area -->
     <div class="chat-main">
-      <!-- Top bar: mode & model -->
       <div class="chat-topbar">
         <el-radio-group v-model="chatMode" size="small">
-          <el-radio-button value="DIRECT">直接对话</el-radio-button>
-          <el-radio-button value="KNOWLEDGE_BASE">知识库</el-radio-button>
-          <el-radio-button value="INTERNET_SEARCH">联网搜索</el-radio-button>
+          <el-radio-button value="DIRECT">{{ texts.direct }}</el-radio-button>
+          <el-radio-button value="KNOWLEDGE_BASE">{{ texts.knowledgeBase }}</el-radio-button>
+          <el-radio-button value="INTERNET_SEARCH">{{ texts.internetSearch }}</el-radio-button>
         </el-radio-group>
-        <el-select v-model="model" size="small" style="width: 200px" placeholder="选择模型">
-          <el-option label="Qwen3-235B (DashScope)" value="qwen3-235b-a22b" />
-          <el-option label="Qwen3-30B (DashScope)" value="qwen3-30b-a3b" />
-          <el-option label="Qwen2.5-VL (DashScope)" value="qwen2.5-vl-72b-instruct" />
-          <el-option label="DeepSeek-R1 (iFlow)" value="deepseek-ai/DeepSeek-R1" />
-          <el-option label="DeepSeek-V3 (iFlow)" value="deepseek-ai/DeepSeek-V3-0324" />
+
+        <el-select
+          v-model="model"
+          size="small"
+          style="width: 220px"
+          :placeholder="texts.selectModel"
+          :loading="modelsLoading"
+          :disabled="modelsLoading || modelOptions.length === 0"
+        >
+          <el-option v-for="opt in modelOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
       </div>
 
-      <!-- Messages -->
       <div class="messages-area" ref="messagesRef">
-        <ChatMessage v-for="(msg, i) in messages" :key="i" :msg="msg" />
-        <div v-if="sending" class="typing-indicator">
-          <el-icon class="is-loading"><Loading /></el-icon> AI 正在思考...
+        <ChatMessage v-for="(msg, index) in messages" :key="index" :msg="msg" />
+        <div v-if="sending || generatingImage" class="typing-indicator">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          {{ sending ? texts.aiThinking : texts.imageGenerating }}
         </div>
       </div>
 
-      <!-- Image preview -->
       <div v-if="uploadedImages.length" class="image-preview">
-        <div v-for="(img, i) in uploadedImages" :key="i" class="preview-item">
-          <el-image :src="img.previewUrl" fit="cover" style="width:60px;height:60px;border-radius:6px" />
-          <el-icon class="remove-img" @click="uploadedImages.splice(i, 1)"><Close /></el-icon>
+        <div v-for="(img, index) in uploadedImages" :key="index" class="preview-item">
+          <el-image :src="img.previewUrl" fit="cover" style="width: 60px; height: 60px; border-radius: 6px" />
+          <el-icon class="remove-img" @click="uploadedImages.splice(index, 1)"><Close /></el-icon>
         </div>
       </div>
 
-      <!-- Input area -->
       <div class="chat-input">
-        <el-upload
-          :show-file-list="false"
-          :before-upload="handleImageUpload"
-          accept="image/*"
-          multiple
-        >
+        <el-upload :show-file-list="false" :before-upload="handleImageUpload" accept="image/*" multiple>
           <el-button :icon="Picture" circle size="small" />
         </el-upload>
+
+        <el-button size="small" :loading="generatingImage" :disabled="!userInput.trim() || sending || generatingImage" @click="handleGenerateImage">
+          {{ texts.generateImage }}
+        </el-button>
+
         <el-input
           v-model="userInput"
           type="textarea"
           :autosize="{ minRows: 1, maxRows: 4 }"
-          placeholder="输入消息..."
+          :placeholder="texts.inputPlaceholder"
           @keydown.enter.exact.prevent="sendMessage"
         />
-        <el-button type="primary" :icon="Promotion" circle @click="sendMessage" :disabled="!userInput.trim() || sending" />
+
+        <el-button type="primary" :icon="Promotion" circle :disabled="!userInput.trim() || sending || generatingImage" @click="sendMessage" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
-import { Picture, Promotion } from '@element-plus/icons-vue'
+import { nextTick, onMounted, ref } from 'vue'
+import { ChatLineSquare, Close, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ChatMessage from '@/components/ChatMessage.vue'
-import { sendChat, getHistoryTypes, getChatHistory } from '@/api/chat'
+import { generateImage, getChatHistory, getHistoryList, getModelOptions, sendChat } from '@/api/chat'
 import { uploadImages } from '@/api/upload'
 import { useUserStore } from '@/stores/user'
-import type { MessageVO, ChatMode, ImagesResponse } from '@/types'
+import type { ChatMode, ConversationItem, ImagesResponse, MessageVO, ModelOption } from '@/types'
+
+defineOptions({ name: 'ChatView' })
+
+const texts = {
+  newChat: '\u65b0\u5bf9\u8bdd',
+  noHistory: '\u6682\u65e0\u5386\u53f2',
+  direct: '\u76f4\u63a5\u5bf9\u8bdd',
+  knowledgeBase: '\u77e5\u8bc6\u5e93',
+  internetSearch: '\u8054\u7f51\u641c\u7d22',
+  selectModel: '\u9009\u62e9\u6a21\u578b',
+  aiThinking: 'AI \u6b63\u5728\u601d\u8003...',
+  imageGenerating: '\u6b63\u5728\u751f\u6210\u56fe\u7247...',
+  generateImage: '\u751f\u56fe',
+  inputPlaceholder: '\u8f93\u5165\u6d88\u606f...',
+  selectModelFirst: '\u8bf7\u5148\u9009\u62e9\u6a21\u578b',
+  uploadImageFailed: '\u56fe\u7247\u4e0a\u4f20\u5931\u8d25',
+  chatFailed: '\u8bf7\u6c42\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+  modelLoadFailed: '\u6a21\u578b\u5217\u8868\u52a0\u8f7d\u5931\u8d25',
+  generatedImage: '\u5df2\u751f\u6210\u56fe\u7247',
+  imageFailed: '\u56fe\u7247\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+  imagePromptPrefix: '\u3010\u6587\u751f\u56fe\u3011'
+} as const
 
 const userStore = useUserStore()
 const messagesRef = ref<HTMLElement>()
 const messages = ref<MessageVO[]>([])
 const userInput = ref('')
 const sending = ref(false)
+const generatingImage = ref(false)
 const chatMode = ref<ChatMode>('DIRECT')
-const model = ref('qwen3-235b-a22b')
+const model = ref('')
+const modelOptions = ref<ModelOption[]>([])
+const modelsLoading = ref(false)
 const currentChatId = ref('')
-const historyIds = ref<string[]>([])
+const historyItems = ref<ConversationItem[]>([])
 const uploadedImages = ref<ImagesResponse[]>([])
 
 function generateChatId() {
@@ -107,40 +133,35 @@ function newChat() {
   currentChatId.value = generateChatId()
   messages.value = []
   uploadedImages.value = []
+  userInput.value = ''
 }
 
 async function loadHistoryList() {
   try {
-    const types = ['DIRECT', 'KNOWLEDGE_BASE', 'INTERNET_SEARCH']
-    const allIds = new Set<string>()
-    // 并行请求所有类型的历史列表
-    const results = await Promise.all(types.map((t) => getHistoryTypes(t).catch(() => null)))
-    for (const ids of results) {
-      if (ids) ids.forEach((id) => allIds.add(id))
-    }
-    historyIds.value = Array.from(allIds)
-  } catch { /* ignore */ }
+    historyItems.value = (await getHistoryList()) || []
+  } catch {
+  }
 }
 
 async function loadChat(chatId: string) {
   currentChatId.value = chatId
   try {
-    const history = await getChatHistory(chatId)
-    messages.value = history || []
+    messages.value = (await getChatHistory(chatId)) || []
     scrollToBottom()
-  } catch { /* ignore */ }
+  } catch {
+  }
 }
 
 async function handleImageUpload(file: File) {
   try {
-    const res = await uploadImages([file])
-    if (res && res.length) {
-      uploadedImages.value.push(...res)
+    const response = await uploadImages([file])
+    if (response && response.length) {
+      uploadedImages.value.push(...response)
     }
   } catch {
-    ElMessage.error('图片上传失败')
+    ElMessage.error(texts.uploadImageFailed)
   }
-  return false // prevent default upload
+  return false
 }
 
 function scrollToBottom() {
@@ -151,13 +172,30 @@ function scrollToBottom() {
   })
 }
 
+function ensureCurrentChat() {
+  if (!currentChatId.value) {
+    currentChatId.value = generateChatId()
+  }
+}
+
+function appendNewHistoryTitle(title: string) {
+  if (!historyItems.value.some((item) => item.chatId === currentChatId.value)) {
+    historyItems.value.unshift({ chatId: currentChatId.value, title: title.substring(0, 50) || null })
+  }
+}
+
 async function sendMessage() {
   const input = userInput.value.trim()
-  if (!input || sending.value) return
+  if (!input || sending.value || generatingImage.value) return
+  if (!model.value) {
+    ElMessage.warning(texts.selectModelFirst)
+    return
+  }
 
-  if (!currentChatId.value) currentChatId.value = generateChatId()
+  ensureCurrentChat()
 
-  messages.value.push({ role: 'USER', content: input })
+  const currentImages = uploadedImages.value.map((img) => img.previewUrl || img.imageUrl)
+  messages.value.push({ role: 'USER', content: input, images: currentImages.length ? currentImages : undefined })
   userInput.value = ''
   sending.value = true
   scrollToBottom()
@@ -171,23 +209,62 @@ async function sendMessage() {
       model: model.value,
       imageFiles: uploadedImages.value.length ? uploadedImages.value : null
     })
-    messages.value.push({ role: 'ASSISTANT', content: reply || '(无回复)' })
+    messages.value.push({ role: 'ASSISTANT', content: reply || '(empty)' })
     uploadedImages.value = []
-    // Refresh history list
-    if (!historyIds.value.includes(currentChatId.value)) {
-      historyIds.value.unshift(currentChatId.value)
-    }
+    appendNewHistoryTitle(input)
   } catch {
-    messages.value.push({ role: 'ASSISTANT', content: '请求失败，请重试。' })
+    messages.value.push({ role: 'ASSISTANT', content: texts.chatFailed })
   } finally {
     sending.value = false
     scrollToBottom()
   }
 }
 
+async function handleGenerateImage() {
+  const prompt = userInput.value.trim()
+  if (!prompt || generatingImage.value || sending.value) return
+
+  ensureCurrentChat()
+  generatingImage.value = true
+  messages.value.push({ role: 'USER', content: `${texts.imagePromptPrefix}${prompt}` })
+  userInput.value = ''
+  scrollToBottom()
+
+  try {
+    const image = await generateImage(prompt, currentChatId.value)
+    const imageUrl = image.previewUrl || image.imageUrl
+    messages.value.push({
+      role: 'ASSISTANT',
+      content: texts.generatedImage,
+      images: imageUrl ? [imageUrl] : undefined
+    })
+    appendNewHistoryTitle(prompt)
+  } catch {
+    messages.value.push({ role: 'ASSISTANT', content: texts.imageFailed })
+  } finally {
+    generatingImage.value = false
+    scrollToBottom()
+  }
+}
+
+async function loadModelOptions() {
+  modelsLoading.value = true
+  try {
+    modelOptions.value = (await getModelOptions()) || []
+    if (modelOptions.value.length > 0 && !model.value) {
+      model.value = modelOptions.value[0].value
+    }
+  } catch {
+    ElMessage.error(texts.modelLoadFailed)
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
 onMounted(() => {
   newChat()
   loadHistoryList()
+  loadModelOptions()
 })
 </script>
 

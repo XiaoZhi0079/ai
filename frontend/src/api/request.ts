@@ -41,6 +41,12 @@ request.interceptors.response.use(
   (error) => {
     const resp = error.response
     if (resp) {
+      if (resp.status === 401) {
+        localStorage.removeItem('user_auth')
+        ElMessage.warning('登录已过期，请重新登录')
+        router.push('/login')
+        return Promise.reject(error)
+      }
       const data = resp.data
       // Backend may return LeeResult even on 500
       if (data && typeof data === 'object' && data.message) {

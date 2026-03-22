@@ -41,12 +41,24 @@ export interface ChatEntity {
 export interface MessageVO {
   role: 'USER' | 'ASSISTANT' | 'SYSTEM'
   content: string
+  images?: string[]
 }
 
 export interface ImagesResponse {
   imageUrl: string
   previewUrl: string
   mimeType: string
+}
+
+export interface ModelOption {
+  value: string
+  label: string
+  platform?: string
+}
+
+export interface ConversationItem {
+  chatId: string
+  title: string | null
 }
 
 export interface UserView {

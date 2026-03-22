@@ -22,23 +22,17 @@ public class StudentController {
     @RoleRequired({Role.ADMIN, Role.TEACHER})
     @PostMapping
     public LeeResult<Student> create(HttpServletRequest request,
-                                     @RequestBody Student student,
-                                     @RequestHeader(value = "X-User", required = false) String operator,
-                                     @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return LeeResult.ok(studentService.create(student, OperatorResolver.resolve(request, operator, role)));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                     @RequestBody Student student) {
+        return LeeResult.ok(studentService.create(student, OperatorResolver.resolve(request)));
     }
 
-    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @RoleRequired({Role.ADMIN, Role.TEACHER, Role.STUDENT})
     @GetMapping
     public LeeResult<List<Student>> list() {
         return LeeResult.ok(studentService.list());
     }
 
-    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @RoleRequired({Role.ADMIN, Role.TEACHER, Role.STUDENT})
     @GetMapping("/{id}")
     public LeeResult<Student> get(@PathVariable Integer id) {
         return studentService.get(id)
@@ -50,25 +44,17 @@ public class StudentController {
     @PutMapping("/{id}")
     public LeeResult<Student> update(HttpServletRequest request,
                                      @PathVariable Integer id,
-                                     @RequestBody Student student,
-                                     @RequestHeader(value = "X-User", required = false) String operator,
-                                     @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return studentService.update(id, student, OperatorResolver.resolve(request, operator, role))
-                    .map(LeeResult::ok)
-                    .orElseGet(() -> LeeResult.fail("Student not found"));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                     @RequestBody Student student) {
+        return studentService.update(id, student, OperatorResolver.resolve(request))
+                .map(LeeResult::ok)
+                .orElseGet(() -> LeeResult.fail("Student not found"));
     }
 
     @RoleRequired({Role.ADMIN, Role.TEACHER})
     @DeleteMapping("/{id}")
     public LeeResult<Void> delete(HttpServletRequest request,
-                                  @PathVariable Integer id,
-                                  @RequestHeader(value = "X-User", required = false) String operator,
-                                  @RequestHeader(value = "X-Role", required = false) String role) {
-        boolean deleted = studentService.delete(id, OperatorResolver.resolve(request, operator, role));
+                                  @PathVariable Integer id) {
+        boolean deleted = studentService.delete(id, OperatorResolver.resolve(request));
         return deleted ? LeeResult.ok() : LeeResult.fail("Student not found");
     }
 }

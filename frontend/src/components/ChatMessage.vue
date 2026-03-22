@@ -4,7 +4,12 @@
       <el-icon v-if="msg.role === 'USER'" size="20"><User /></el-icon>
       <el-icon v-else size="20"><Monitor /></el-icon>
     </div>
-    <div class="bubble" v-html="renderedContent"></div>
+    <div class="bubble">
+      <div v-html="renderedContent"></div>
+      <div v-if="msg.images && msg.images.length" class="message-images">
+        <img v-for="(url, i) in msg.images" :key="i" :src="url" alt="image" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -47,4 +52,6 @@ const renderedContent = computed(() => {
 .bubble :deep(code) { font-family: 'Consolas', monospace; font-size: 13px; }
 .bubble :deep(p) { margin: 0 0 8px; }
 .bubble :deep(p:last-child) { margin-bottom: 0; }
+.message-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.message-images img { width: 120px; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid #e4e7ed; }
 </style>

@@ -10,11 +10,18 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,15 +34,30 @@ public class SearXngServiceImpl implements SearXngService {
     @Value("${internet.websearch.searxng.counts}")
     private Integer SEARXNG_COUNTS;
 
+    @Value("${internet.websearch.searxng.safesearch:1}")
+    private Integer SEARXNG_SAFESEARCH;
+
+    @Value("${internet.websearch.searxng.max-content-length:300}")
+    private Integer SEARXNG_MAX_CONTENT_LENGTH;
+
+    @Value("${internet.websearch.searxng.blocked-domains:}")
+    private String SEARXNG_BLOCKED_DOMAINS;
+
+    @Value("${internet.websearch.searxng.blocked-keywords:}")
+    private String SEARXNG_BLOCKED_KEYWORDS;
+
     private final OkHttpClient okHttpClient;
 
 
     public List<SearchResult> search(String query) {
-        HttpUrl url = HttpUrl.get(SEARXNG_URL)
+        HttpUrl.Builder urlBuilder = HttpUrl.get(SEARXNG_URL)
                 .newBuilder()
                 .addQueryParameter("q", query)
-                .addQueryParameter("format", "json")
-                .build();
+                .addQueryParameter("format", "json");
+        if (SEARXNG_SAFESEARCH != null) {
+            urlBuilder.addQueryParameter("safesearch", String.valueOf(SEARXNG_SAFESEARCH));
+        }
+        HttpUrl url = urlBuilder.build();
 
         Request request = new Request.Builder()
                 .url(url)
@@ -88,12 +110,102 @@ public class SearXngServiceImpl implements SearXngService {
         if (results.isEmpty()) {
             return Collections.emptyList();
         }
-        // 注意：原有的 subList 和 parallelStream 结合可能有问题，如果 results 数量小于 SEARXNG_COUNTS
-        // 先 limit 再 sorted 更安全高效
-        return results.stream()
-                .limit(SEARXNG_COUNTS)
+        List<SearchResult> cleaned = sanitizeResults(results);
+        if (cleaned.isEmpty()) {
+            return Collections.emptyList();
+        }
+        // Note: limit + sorted is safer than subList with parallel streams.
+        return cleaned.stream()
                 .sorted(Comparator.comparingDouble(SearchResult::getScore).reversed())
+                .limit(SEARXNG_COUNTS)
                 .toList();
+    }
+
+    private List<SearchResult> sanitizeResults(List<SearchResult> results) {
+        Set<String> blockedDomains = parseCsvToSet(SEARXNG_BLOCKED_DOMAINS);
+        Set<String> blockedKeywords = parseCsvToSet(SEARXNG_BLOCKED_KEYWORDS);
+
+        List<SearchResult> sanitized = new ArrayList<>(results.size());
+        for (SearchResult r : results) {
+            String title = cleanText(r.getTitle(), SEARXNG_MAX_CONTENT_LENGTH);
+            String content = cleanText(r.getContent(), SEARXNG_MAX_CONTENT_LENGTH);
+            String url = r.getUrl();
+            SearchResult cleaned = new SearchResult(title, content, url, r.getScore());
+            if (!isAllowed(cleaned, blockedDomains, blockedKeywords)) {
+                continue;
+            }
+            if (!StringUtils.hasText(cleaned.getTitle()) && !StringUtils.hasText(cleaned.getContent())) {
+                continue;
+            }
+            sanitized.add(cleaned);
+        }
+        return sanitized;
+    }
+
+    private boolean isAllowed(SearchResult result, Set<String> blockedDomains, Set<String> blockedKeywords) {
+        String host = extractHost(result.getUrl());
+        if (StringUtils.hasText(host)) {
+            String hostLower = host.toLowerCase(Locale.ROOT);
+            for (String blocked : blockedDomains) {
+                if (blocked.isBlank()) continue;
+                String blockedLower = blocked.toLowerCase(Locale.ROOT);
+                if (hostLower.equals(blockedLower) || hostLower.endsWith("." + blockedLower)) {
+                    return false;
+                }
+            }
+        }
+
+        if (!blockedKeywords.isEmpty()) {
+            String combined = (safe(result.getTitle()) + " " + safe(result.getContent()) + " " + safe(result.getUrl()))
+                    .toLowerCase(Locale.ROOT);
+            for (String kw : blockedKeywords) {
+                if (kw.isBlank()) continue;
+                if (combined.contains(kw.toLowerCase(Locale.ROOT))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private String extractHost(String url) {
+        if (!StringUtils.hasText(url)) {
+            return "";
+        }
+        try {
+            URI uri = URI.create(url);
+            return uri.getHost() == null ? "" : uri.getHost();
+        } catch (Exception ex) {
+            return "";
+        }
+    }
+
+    private String cleanText(String input, Integer maxLen) {
+        if (!StringUtils.hasText(input)) {
+            return "";
+        }
+        String cleaned = input.replaceAll("<[^>]*>", " ");
+        cleaned = cleaned.replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", " ");
+        cleaned = cleaned.replaceAll("\\s+", " ").trim();
+        int limit = maxLen == null ? 0 : maxLen;
+        if (limit > 0 && cleaned.length() > limit) {
+            cleaned = cleaned.substring(0, limit) + "...";
+        }
+        return cleaned;
+    }
+
+    private Set<String> parseCsvToSet(String csv) {
+        if (!StringUtils.hasText(csv)) {
+            return Collections.emptySet();
+        }
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toSet());
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }
 

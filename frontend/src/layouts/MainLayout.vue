@@ -32,7 +32,11 @@
         </div>
       </el-header>
       <el-main class="layout-main">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <keep-alive include="ChatView">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -59,11 +63,11 @@ const allMenus: MenuItem[] = [
   { path: '/dashboard', title: '仪表盘', icon: 'Odometer' },
   { path: '/chat', title: 'AI 对话', icon: 'ChatDotRound' },
   { path: '/users', title: '用户管理', icon: 'User', roles: ['ADMIN'] },
-  { path: '/teachers', title: '教师管理', icon: 'Avatar', roles: ['ADMIN'] },
-  { path: '/students', title: '学生管理', icon: 'Reading', roles: ['ADMIN', 'TEACHER'] },
-  { path: '/courses', title: '课程管理', icon: 'Notebook', roles: ['ADMIN', 'TEACHER'] },
-  { path: '/grades', title: '成绩管理', icon: 'TrendCharts', roles: ['ADMIN', 'TEACHER'] },
-  { path: '/rag', title: '知识库', icon: 'UploadFilled', roles: ['ADMIN', 'TEACHER'] }
+  { path: '/teachers', title: '教师信息', icon: 'Avatar', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/students', title: '学生信息', icon: 'Reading', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/courses', title: '课程信息', icon: 'Notebook', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/grades', title: '成绩信息', icon: 'TrendCharts', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/rag', title: '知识库', icon: 'UploadFilled', roles: ['ADMIN', 'TEACHER', 'STUDENT'] }
 ]
 
 const menuItems = computed(() =>

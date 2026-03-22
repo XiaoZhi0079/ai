@@ -19,26 +19,20 @@ public class TeacherController {
 
     private final TeacherService teacherService;
 
-    @RoleRequired({Role.ADMIN})
+    @RoleRequired({Role.ADMIN, Role.TEACHER})
     @PostMapping
     public LeeResult<Teacher> create(HttpServletRequest request,
-                                     @RequestBody Teacher teacher,
-                                     @RequestHeader(value = "X-User", required = false) String operator,
-                                     @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return LeeResult.ok(teacherService.create(teacher, OperatorResolver.resolve(request, operator, role)));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                     @RequestBody Teacher teacher) {
+        return LeeResult.ok(teacherService.create(teacher, OperatorResolver.resolve(request)));
     }
 
-    @RoleRequired({Role.ADMIN})
+    @RoleRequired({Role.ADMIN, Role.TEACHER, Role.STUDENT})
     @GetMapping
     public LeeResult<List<Teacher>> list() {
         return LeeResult.ok(teacherService.list());
     }
 
-    @RoleRequired({Role.ADMIN})
+    @RoleRequired({Role.ADMIN, Role.TEACHER, Role.STUDENT})
     @GetMapping("/{id}")
     public LeeResult<Teacher> get(@PathVariable Integer id) {
         return teacherService.get(id)
@@ -46,29 +40,21 @@ public class TeacherController {
                 .orElseGet(() -> LeeResult.fail("Teacher not found"));
     }
 
-    @RoleRequired({Role.ADMIN})
+    @RoleRequired({Role.ADMIN, Role.TEACHER})
     @PutMapping("/{id}")
     public LeeResult<Teacher> update(HttpServletRequest request,
                                      @PathVariable Integer id,
-                                     @RequestBody Teacher teacher,
-                                     @RequestHeader(value = "X-User", required = false) String operator,
-                                     @RequestHeader(value = "X-Role", required = false) String role) {
-        try {
-            return teacherService.update(id, teacher, OperatorResolver.resolve(request, operator, role))
-                    .map(LeeResult::ok)
-                    .orElseGet(() -> LeeResult.fail("Teacher not found"));
-        } catch (IllegalArgumentException ex) {
-            return LeeResult.fail(ex.getMessage());
-        }
+                                     @RequestBody Teacher teacher) {
+        return teacherService.update(id, teacher, OperatorResolver.resolve(request))
+                .map(LeeResult::ok)
+                .orElseGet(() -> LeeResult.fail("Teacher not found"));
     }
 
-    @RoleRequired({Role.ADMIN})
+    @RoleRequired({Role.ADMIN, Role.TEACHER})
     @DeleteMapping("/{id}")
     public LeeResult<Void> delete(HttpServletRequest request,
-                                  @PathVariable Integer id,
-                                  @RequestHeader(value = "X-User", required = false) String operator,
-                                  @RequestHeader(value = "X-Role", required = false) String role) {
-        boolean deleted = teacherService.delete(id, OperatorResolver.resolve(request, operator, role));
+                                  @PathVariable Integer id) {
+        boolean deleted = teacherService.delete(id, OperatorResolver.resolve(request));
         return deleted ? LeeResult.ok() : LeeResult.fail("Teacher not found");
     }
 }

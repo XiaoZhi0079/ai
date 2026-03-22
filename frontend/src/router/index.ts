@@ -38,31 +38,31 @@ const router = createRouter({
           path: 'teachers',
           name: 'Teachers',
           component: () => import('@/views/teacher/TeacherView.vue'),
-          meta: { title: '教师管理', icon: 'Avatar', roles: ['ADMIN'] as Role[] }
+          meta: { title: '教师信息', icon: 'Avatar', roles: ['ADMIN', 'TEACHER', 'STUDENT'] as Role[] }
         },
         {
           path: 'students',
           name: 'Students',
           component: () => import('@/views/student/StudentView.vue'),
-          meta: { title: '学生管理', icon: 'Reading', roles: ['ADMIN', 'TEACHER'] as Role[] }
+          meta: { title: '学生信息', icon: 'Reading', roles: ['ADMIN', 'TEACHER', 'STUDENT'] as Role[] }
         },
         {
           path: 'courses',
           name: 'Courses',
           component: () => import('@/views/course/CourseView.vue'),
-          meta: { title: '课程管理', icon: 'Notebook', roles: ['ADMIN', 'TEACHER'] as Role[] }
+          meta: { title: '课程信息', icon: 'Notebook', roles: ['ADMIN', 'TEACHER', 'STUDENT'] as Role[] }
         },
         {
           path: 'grades',
           name: 'Grades',
           component: () => import('@/views/grade/GradeView.vue'),
-          meta: { title: '成绩管理', icon: 'TrendCharts', roles: ['ADMIN', 'TEACHER'] as Role[] }
+          meta: { title: '成绩信息', icon: 'TrendCharts', roles: ['ADMIN', 'TEACHER', 'STUDENT'] as Role[] }
         },
         {
           path: 'rag',
           name: 'Rag',
           component: () => import('@/views/rag/RagView.vue'),
-          meta: { title: '知识库', icon: 'UploadFilled', roles: ['ADMIN', 'TEACHER'] as Role[] }
+          meta: { title: '知识库', icon: 'UploadFilled', roles: ['ADMIN', 'TEACHER', 'STUDENT'] as Role[] }
         }
       ]
     },
