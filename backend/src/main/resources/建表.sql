@@ -117,7 +117,10 @@ CREATE TABLE rag_documents (
     uploaded_by INT          NULL     COMMENT '上传者 user_id',
     owner_user_id INT        NULL     COMMENT '私有知识库归属 user_id，公有库为空',
     knowledge_scope VARCHAR(16) NOT NULL DEFAULT 'PRIVATE' COMMENT '知识库范围: PUBLIC/PRIVATE',
-    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+    chunk_count INT          NOT NULL DEFAULT 0 COMMENT '切片数量',
+    extracted_text LONGTEXT  NULL     COMMENT '入库文本内容',
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库文档元信息';
 
 CREATE TABLE rag_ocr_user_settings (

@@ -1,7 +1,8 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
+// Shared axios instance for all frontend API modules.
 const request = axios.create({
   baseURL: '',
   timeout: 60000
@@ -23,7 +24,8 @@ request.interceptors.request.use((config) => {
 request.interceptors.response.use(
   (response) => {
     const data = response.data
-    // LeeResult wrapper has code field
+
+    // Unwrap the common LeeResult envelope returned by most backend endpoints.
     if (data !== null && typeof data === 'object' && 'code' in data) {
       if (data.code === 0) {
         return data.data
@@ -32,10 +34,11 @@ request.interceptors.response.use(
         localStorage.removeItem('user_auth')
         router.push('/login')
       }
-      ElMessage.error(data.message || '请求失败')
+      ElMessage.error(data.message || 'Request failed')
       return Promise.reject(new Error(data.message))
     }
-    // Raw response (e.g. /ai/chat returns plain string)
+
+    // Some endpoints return raw values, such as plain chat text.
     return data
   },
   (error) => {
@@ -43,21 +46,22 @@ request.interceptors.response.use(
     if (resp) {
       if (resp.status === 401) {
         localStorage.removeItem('user_auth')
-        ElMessage.warning('登录已过期，请重新登录')
+        ElMessage.warning('Login expired, please sign in again')
         router.push('/login')
         return Promise.reject(error)
       }
+
       const data = resp.data
-      // Backend may return LeeResult even on 500
+      // Even when HTTP status is not 200, the backend may still return a structured error body.
       if (data && typeof data === 'object' && data.message) {
         ElMessage.error(data.message)
       } else if (typeof data === 'string' && data) {
         ElMessage.error(data.substring(0, 200))
       } else {
-        ElMessage.error(`请求失败 (${resp.status})`)
+        ElMessage.error(`Request failed (${resp.status})`)
       }
     } else {
-      ElMessage.error('无法连接到服务器，请确认后端已启动')
+      ElMessage.error('Cannot reach the server, please verify the backend is running')
     }
     return Promise.reject(error)
   }

@@ -11,25 +11,34 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 
+/**
+ * Exposes the chat endpoint and resolves the current authenticated user.
+ */
 @Slf4j
 @RestController
-@Tag(name = "聊天控制类")
+@Tag(name = "Chat Controller")
 @RequestMapping("/ai")
 @RequiredArgsConstructor
 public class ChatControl {
 
     private final ChatService chatService;
 
-    @Operation(summary = "对话")
+    @Operation(summary = "Chat")
     @PostMapping("/chat")
     public String chat(@RequestBody ChatEntity chatEntity, HttpServletRequest request) throws IOException {
-        log.debug("收到聊天请求: chatId={}, model={}, mode={}", chatEntity.getChatId(), chatEntity.getModel(), chatEntity.getChatMode());
+        log.debug("Received chat request: chatId={}, model={}, mode={}",
+                chatEntity.getChatId(),
+                chatEntity.getModel(),
+                chatEntity.getChatMode());
+
+        // The JWT interceptor stores the current user id in the request.
         Long userId = null;
         String authUserId = (String) request.getAttribute("authUserId");
         if (authUserId != null) {
             try {
                 userId = Long.parseLong(authUserId);
             } catch (NumberFormatException ignored) {
+                log.debug("Invalid authUserId in request: {}", authUserId);
             }
         }
         return chatService.chat(chatEntity, userId);

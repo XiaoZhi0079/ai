@@ -19,14 +19,14 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.content.Media;
+import org.springframework.ai.content.MediaContent;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StringUtils;
-import org.springframework.ai.content.Media;
-import org.springframework.ai.content.MediaContent;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -34,13 +34,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Coordinates chat requests, prompt assembly, and memory persistence.
+ */
 @RequiredArgsConstructor
 @Slf4j
 @Service
 public class ChatServiceImpl implements ChatService {
 
-    // 优化命名：chatClientMap 更直观
-
+    // Core dependencies used to build prompts and fetch context.
     private final ChatClientFactory clientFactory;
     private final ChatHistoryRepository chatHistoryRepository;
     private final DocumentService documentService;
@@ -58,33 +60,31 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public String chat(ChatEntity chatEntity, Long userId) {
-
-        //获取对话ID
+        // Read the request payload first so the later steps stay simple.
         String chatId = chatEntity.getChatId();
-        //获取对话模型
         String modelName = chatEntity.getModel();
         String userInput = chatEntity.getUserInput();
 
-        // 取用户第一条消息的前50字符作为 title
+        // Use the beginning of the first user message as the conversation title.
         String title = null;
         if (userInput != null && !userInput.isBlank()) {
             title = userInput.length() > 50 ? userInput.substring(0, 50) : userInput;
         }
 
-        // 记录历史（含 userId 和 title，仅首次写入生效）
+        // Save metadata for sidebar history.
         chatHistoryRepository.save(chatId, chatEntity.getChatMode().name(), userId, title);
 
         ChatClient chatClient = clientFactory.getClient(modelName);
 
-        // 1. 根据模式构建消息列表
-        List<ImagesResponse> images = (chatEntity.getImageFiles());
+        // Build the current-round messages and merge them with memory.
+        List<ImagesResponse> images = chatEntity.getImageFiles();
         List<Message> baseMessages = buildMessagesByMode(chatEntity, images, userId);
         List<Message> mergedMessages = appendHistory(chatId, baseMessages);
         Prompt promptWithHistory = new Prompt(mergedMessages);
 
-        // 2. 调用 AI
+        // Send the final prompt to the selected model.
         String reply = chatClient.prompt(promptWithHistory)
-                /*.tools(new DateTimeTools())*/ // 如果 DateTimeTools 无状态，建议注册为 Bean 注入，避免每次 new
+                /*.tools(new DateTimeTools())*/ // Prefer dependency injection if tools become stateful.
                 .call()
                 .content();
         saveToMemory(chatId, userInput, reply, images);
@@ -95,6 +95,7 @@ public class ChatServiceImpl implements ChatService {
         if (!StringUtils.hasText(chatId)) {
             return baseMessages;
         }
+        // Memory is optional; blank history means only the current round is sent.
         List<Message> history = chatMemory.get(chatId);
         if (CollectionUtils.isEmpty(history)) {
             return baseMessages;
@@ -109,6 +110,7 @@ public class ChatServiceImpl implements ChatService {
         if (!StringUtils.hasText(chatId)) {
             return;
         }
+        // Store both sides of the conversation so follow-up questions keep context.
         if (StringUtils.hasText(userInput) || (images != null && !images.isEmpty())) {
             chatMemory.add(chatId, buildUserMessage(userInput, images));
         }
@@ -122,9 +124,13 @@ public class ChatServiceImpl implements ChatService {
         if (images == null || images.isEmpty()) {
             return new UserMessage(safeText);
         }
+
+        // Only valid image URLs are attached to the multimodal user message.
         List<Media> mediaList = new ArrayList<>();
         for (ImagesResponse image : images) {
-            if (!StringUtils.hasText(image.getImageUrl())) continue;
+            if (!StringUtils.hasText(image.getImageUrl())) {
+                continue;
+            }
             MimeType mimeType = resolveMimeType(image.getMimeType());
             mediaList.add(new Media(mimeType, URI.create(image.getImageUrl())));
         }
@@ -153,6 +159,8 @@ public class ChatServiceImpl implements ChatService {
         if (limit < 0) {
             return messages;
         }
+
+        // Keep the most recent image messages and downgrade older ones to plain text.
         int remaining = limit;
         List<Message> reversed = new ArrayList<>(messages.size());
         for (int i = messages.size() - 1; i >= 0; i--) {
@@ -189,66 +197,61 @@ public class ChatServiceImpl implements ChatService {
     }
 
     /**
-     * 根据聊天模式构建基础 Prompt
+     * Create the prompt messages for the selected chat mode.
      */
     private List<Message> buildMessagesByMode(ChatEntity chatEntity, List<ImagesResponse> images, Long userId) {
-
-        //获取用户姓名
         String userName = chatEntity.getUserName();
-        //获取用户输入
         String userInput = chatEntity.getUserInput();
-        //获取对话模式
         ChatMode chatMode = chatEntity.getChatMode();
 
-        switch (chatMode) {
-            case INTERNET_SEARCH:
-                return createInternetSearchMessages(userName, userInput, images);
-            case KNOWLEDGE_BASE:
-                return createKnowledgeBaseMessages(userId, userInput, images);
-            case DIRECT:
-                return createDirectMessages(userName, userInput, images);
-            default:
-                throw new IllegalArgumentException("不支持的聊天模式: " + chatMode);
-        }
+        return switch (chatMode) {
+            case INTERNET_SEARCH -> createInternetSearchMessages(userName, userInput, images);
+            case KNOWLEDGE_BASE -> createKnowledgeBaseMessages(userId, userInput, images);
+            case DIRECT -> createDirectMessages(userName, userInput, images);
+            default -> throw new IllegalArgumentException("Unsupported chat mode: " + chatMode);
+        };
     }
 
     /**
-     * 知识库 Prompt
+     * Build a prompt that includes retrieved knowledge-base context.
      */
     private List<Message> createKnowledgeBaseMessages(Long userId, String userInput, List<ImagesResponse> images) {
-        log.info("【用户: {}】使用【知识库模式】", userId);
+        log.info("User {} is using knowledge-base mode", userId);
         List<Document> relatedDocs = documentService.doSearch(userInput, userId);
 
-        String context = CollectionUtils.isEmpty(relatedDocs) ?
-                "没有找到相关的知识库信息。" :
-                relatedDocs.stream().map(Document::getText).collect(Collectors.joining("\n---\n"));
+        String context = CollectionUtils.isEmpty(relatedDocs)
+                ? "No relevant knowledge-base content was found."
+                : relatedDocs.stream().map(this::formatKnowledgeContext).collect(Collectors.joining("\n---\n"));
 
         String promptText = renderTemplate(ragPromptTemplateStr, context, userInput);
         return List.of(buildUserMessage(promptText, images));
     }
 
     /**
-     * 联网搜索 Prompt
+     * Build a prompt that includes internet search results.
      */
     private List<Message> createInternetSearchMessages(String userId, String userInput, List<ImagesResponse> images) {
-        log.info("【用户: {}】使用【联网搜索模式】", userId);
+        log.info("User {} is using internet-search mode", userId);
         List<SearchResult> searchResults = searXngService.search(userInput);
 
-        String context = CollectionUtils.isEmpty(searchResults) ?
-                "未能获取到有效的网络搜索结果。" :
-                searchResults.stream()
-                        .map(r -> String.format("【标题】: %s\n【摘要】: %s\n【链接】: %s", r.getTitle(), r.getContent(), r.getUrl()))
-                        .collect(Collectors.joining("\n\n---\n\n"));
+        String context = CollectionUtils.isEmpty(searchResults)
+                ? "No valid internet search result was returned."
+                : searchResults.stream()
+                .map(result -> String.format("[Title] %s\n[Snippet] %s\n[Link] %s",
+                        result.getTitle(),
+                        result.getContent(),
+                        result.getUrl()))
+                .collect(Collectors.joining("\n\n---\n\n"));
 
         String promptText = renderTemplate(internetSearchPromptTemplateStr, context, userInput);
         return List.of(buildUserMessage(promptText, images));
     }
 
     /**
-     * 基础 Prompt
+     * Build a prompt for direct chat without external context.
      */
     private List<Message> createDirectMessages(String userId, String userInput, List<ImagesResponse> images) {
-        log.info("【用户: {}】使用【普通模式】", userId);
+        log.info("User {} is using direct mode", userId);
         return List.of(buildUserMessage(userInput, images));
     }
 
@@ -261,4 +264,11 @@ public class ChatServiceImpl implements ChatService {
         return result;
     }
 
+    private String formatKnowledgeContext(Document document) {
+        String fileName = document.getMetadata() == null ? null : String.valueOf(document.getMetadata().get("fileName"));
+        if (!StringUtils.hasText(fileName)) {
+            return document.getText();
+        }
+        return "[来源文件] " + fileName + "\n" + document.getText();
+    }
 }

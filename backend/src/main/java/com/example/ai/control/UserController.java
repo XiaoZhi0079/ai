@@ -2,6 +2,7 @@ package com.example.ai.control;
 
 import com.example.ai.entity.User;
 import com.example.ai.pojo.LeeResult;
+import com.example.ai.pojo.UserOption;
 import com.example.ai.pojo.UserView;
 import com.example.ai.service.UserService;
 import com.example.ai.security.Role;
@@ -33,6 +34,23 @@ public class UserController {
     public LeeResult<List<UserView>> list() {
         List<UserView> views = userService.list().stream().map(this::toView).toList();
         return LeeResult.ok(views);
+    }
+
+    @RoleRequired({Role.ADMIN, Role.TEACHER})
+    @GetMapping("/options")
+    public LeeResult<List<UserOption>> listOptions(@RequestParam(value = "role", required = false) String role,
+                                                   HttpServletRequest request) {
+        String currentRole = String.valueOf(request.getAttribute("authRole")).trim().toUpperCase();
+        String targetRole = role == null ? "STUDENT" : role.trim().toUpperCase();
+        if ("TEACHER".equals(currentRole) && !"STUDENT".equals(targetRole)) {
+            return LeeResult.fail(403, "教师只能查看学生用户选项");
+        }
+        List<UserOption> options = userService.list().stream()
+                .filter(user -> user.getRole() != null)
+                .filter(user -> targetRole.isBlank() || user.getRole().name().equals(targetRole))
+                .map(user -> new UserOption(user.getId(), user.getUsername(), user.getRole()))
+                .toList();
+        return LeeResult.ok(options);
     }
 
     @RoleRequired({Role.ADMIN})

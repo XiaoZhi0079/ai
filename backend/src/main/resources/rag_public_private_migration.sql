@@ -2,6 +2,11 @@ ALTER TABLE rag_documents
     ADD COLUMN owner_user_id INT NULL COMMENT '私有知识库归属 user_id，公有库为空' AFTER uploaded_by,
     ADD COLUMN knowledge_scope VARCHAR(16) NOT NULL DEFAULT 'PRIVATE' COMMENT '知识库范围: PUBLIC/PRIVATE' AFTER owner_user_id;
 
+ALTER TABLE rag_documents
+    ADD COLUMN chunk_count INT NOT NULL DEFAULT 0 COMMENT '切片数量' AFTER knowledge_scope,
+    ADD COLUMN extracted_text LONGTEXT NULL COMMENT '入库文本内容' AFTER chunk_count,
+    ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at;
+
 UPDATE rag_documents
 SET owner_user_id = uploaded_by,
     knowledge_scope = 'PRIVATE'

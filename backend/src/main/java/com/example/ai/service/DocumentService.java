@@ -7,9 +7,9 @@ import java.util.List;
 
 public interface DocumentService {
 
-    void loadText(Resource resource, String fileName, Integer docId, String knowledgeScope, Integer ownerUserId);
+    int loadText(Resource resource, String fileName, Integer docId, String knowledgeScope, Integer ownerUserId);
 
-    void loadTextContent(String text, String fileName, Integer docId, String knowledgeScope, Integer ownerUserId);
+    int loadTextContent(String text, String fileName, Integer docId, String knowledgeScope, Integer ownerUserId);
 
     List<Document> doSearch(String question, Long userId);
 

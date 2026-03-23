@@ -11,15 +11,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import CrudTable from '@/components/CrudTable.vue'
 import type { Column, FilterConfig, SearchConfig } from '@/components/CrudTable.vue'
 import { createCrudApi } from '@/api/crud'
+import { getUserOptions } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 import type { Student } from '@/types'
 
 const userStore = useUserStore()
 const api = createCrudApi<Student>('/api/students')
+const studentUserOptions = ref<Array<{ label: string; value: number }>>([])
 
 const genderOptions = [
   { label: '男', value: '男' },
@@ -35,7 +37,7 @@ const columns = computed<Column[]>(() => {
   const isStudent = userStore.role === 'STUDENT'
   return [
     { prop: 'id', label: 'ID', width: 60, tableOnly: true },
-    { prop: 'userId', label: '用户ID', type: 'number', formOnly: true },
+    { prop: 'userId', label: '关联学生用户', type: 'select', options: studentUserOptions.value, formOnly: true },
     { prop: 'name', label: '姓名' },
     { prop: 'gender', label: '性别', type: 'select', options: genderOptions },
     { prop: 'grade', label: '年级', type: 'select', options: gradeOptions },
@@ -57,6 +59,7 @@ const filterConfigs: FilterConfig[] = [
 ]
 
 const rules = {
+  userId: [{ required: true, message: '请选择学生用户', trigger: 'change' }],
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   major: [{ required: true, message: '请输入专业', trigger: 'blur' }]
 }
@@ -71,4 +74,15 @@ const defaultForm = () => ({
   dormitory: '',
   guardianPhone: ''
 })
+
+async function loadStudentUsers() {
+  if (userStore.role === 'STUDENT') return
+  const users = await getUserOptions('STUDENT')
+  studentUserOptions.value = users.map((user) => ({
+    label: `${user.username} (#${user.id})`,
+    value: user.id
+  }))
+}
+
+onMounted(loadStudentUsers)
 </script>

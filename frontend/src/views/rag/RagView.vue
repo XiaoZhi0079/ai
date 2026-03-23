@@ -1,171 +1,241 @@
 <template>
   <div class="rag-container">
-    <h3>{{ texts.title }}</h3>
-    <p class="desc">{{ texts.description }}</p>
-
-    <el-upload
-      ref="uploadRef"
-      drag
-      :auto-upload="false"
-      :on-change="handleChange"
-      :limit="1"
-      accept=".txt,.pdf,.doc,.docx,.md,.png,.jpg,.jpeg,.webp"
-    >
-      <el-icon class="el-icon--upload" size="40"><UploadFilled /></el-icon>
-      <div class="el-upload__text">{{ texts.dropPrefix }} <em>{{ texts.dropAction }}</em></div>
-      <template #tip>
-        <div class="el-upload__tip">{{ texts.supportedFormats }}</div>
-      </template>
-    </el-upload>
-
-    <el-radio-group v-if="userStore.role === 'ADMIN'" v-model="selectedScope" style="margin-top: 16px">
-      <el-radio-button value="PUBLIC">{{ texts.publicScope }}</el-radio-button>
-      <el-radio-button value="PRIVATE">{{ texts.privateScope }}</el-radio-button>
-    </el-radio-group>
-
-    <p class="desc" style="margin-top: 8px">
-      {{ userStore.role === 'ADMIN' ? texts.adminHint : texts.userHint }}
+    <h3>知识库管理</h3>
+    <p class="desc">
+      上传文件后，可先预览或编辑解析结果，再将内容写入知识库。
     </p>
 
-    <div class="actions-row">
-      <el-button @click="ocrDialogVisible = true">{{ texts.ocrSettings }}</el-button>
-      <el-button type="primary" :loading="parsing" :disabled="!selectedFile" @click="handleParse">
-        {{ texts.parseButton }}
-      </el-button>
+    <div class="upload-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">上传文档</div>
+          <div class="panel-subtitle">支持文本、Office、PDF 和图片文件</div>
+        </div>
+        <el-button text @click="ocrDialogVisible = true">OCR 设置</el-button>
+      </div>
+
+      <el-upload
+        ref="uploadRef"
+        drag
+        :auto-upload="false"
+        :on-change="handleChange"
+        :limit="1"
+        accept=".txt,.pdf,.doc,.docx,.md,.png,.jpg,.jpeg,.webp"
+      >
+        <el-icon class="el-icon--upload" size="40"><UploadFilled /></el-icon>
+        <div class="el-upload__text">将文件拖到此处，或 <em>点击选择</em></div>
+        <template #tip>
+          <div class="el-upload__tip">支持：txt / pdf / doc / docx / md / png / jpg / jpeg / webp</div>
+        </template>
+      </el-upload>
+
+      <el-radio-group v-if="userStore.role === 'ADMIN'" v-model="selectedScope" class="scope-switch">
+        <el-radio-button value="PUBLIC">上传到公共知识库</el-radio-button>
+        <el-radio-button value="PRIVATE">上传到私有知识库</el-radio-button>
+      </el-radio-group>
+
+      <p class="upload-note">
+        {{
+          userStore.role === 'ADMIN'
+            ? '管理员可选择上传到公共知识库或私有知识库。'
+            : '普通用户只能上传到自己的私有知识库。'
+        }}
+      </p>
     </div>
 
-    <h3 style="margin-top: 32px">{{ texts.visibleTitle }}</h3>
-    <el-input v-model="searchKey" :placeholder="texts.searchPlaceholder" clearable style="margin-bottom: 12px; width: 300px" />
+    <div class="process-panel">
+      <div class="panel-title">处理方式</div>
+      <div class="process-meta">
+        <el-tag v-if="selectedFileName">{{ selectedFileName }}</el-tag>
+        <el-tag v-if="selectedFileName" :type="isOcrRecommended ? 'warning' : 'success'">
+          {{ isOcrRecommended ? '推荐：OCR 预览' : '推荐：直接入库' }}
+        </el-tag>
+      </div>
+      <p class="process-hint">{{ processHint }}</p>
+      <div class="process-actions">
+        <el-button
+          :type="isOcrRecommended ? 'default' : 'primary'"
+          :plain="isOcrRecommended"
+          :loading="uploadingDirect"
+          :disabled="!selectedFile"
+          @click="handleDirectUpload"
+        >
+          直接入库
+        </el-button>
+        <el-button
+          :type="isOcrRecommended ? 'primary' : 'default'"
+          :plain="!isOcrRecommended"
+          :loading="parsing"
+          :disabled="!selectedFile"
+          @click="handleParse"
+        >
+          先 OCR 预览
+        </el-button>
+      </div>
+    </div>
+
+    <div class="docs-header">
+      <h3>知识库文档</h3>
+      <div class="docs-filters">
+        <el-radio-group v-model="documentScopeFilter">
+          <el-radio-button label="ALL">全部</el-radio-button>
+          <el-radio-button label="PUBLIC">公共</el-radio-button>
+          <el-radio-button label="PRIVATE">私有</el-radio-button>
+        </el-radio-group>
+        <el-input v-model="searchKey" placeholder="按文件名搜索" clearable style="width: 260px" />
+      </div>
+    </div>
 
     <el-table :data="filteredDocuments" v-loading="loadingDocs" style="width: 100%">
-      <el-table-column prop="fileName" :label="texts.fileName">
+      <el-table-column prop="fileName" label="文件名" min-width="220">
         <template #default="{ row }">
           <el-link type="primary" :href="row.ossUrl" target="_blank">{{ row.fileName }}</el-link>
         </template>
       </el-table-column>
 
-      <el-table-column prop="knowledgeScope" :label="texts.scopeLabel" width="120">
+      <el-table-column prop="knowledgeScope" label="范围" width="100">
         <template #default="{ row }">
           <el-tag :type="row.knowledgeScope === 'PUBLIC' ? 'success' : 'info'">
-            {{ row.knowledgeScope === 'PUBLIC' ? texts.publicTag : texts.privateTag }}
+            {{ row.knowledgeScope === 'PUBLIC' ? '公共' : '私有' }}
           </el-tag>
         </template>
       </el-table-column>
 
-      <el-table-column prop="createdAt" :label="texts.createdAt" width="180" />
+      <el-table-column prop="uploadedByName" label="上传人" width="120" />
+      <el-table-column prop="ownerUserName" label="归属用户" width="120">
+        <template #default="{ row }">{{ row.ownerUserName || '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="chunkCount" label="切片数" width="90" />
+      <el-table-column prop="createdAt" label="创建时间" width="180" />
 
-      <el-table-column :label="texts.actionLabel" width="80">
+      <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
-          <el-popconfirm v-if="canDeleteRow(row)" :title="texts.deleteConfirm" @confirm="handleDelete(row.id)">
+          <el-button type="primary" link size="small" @click="openDocumentDetail(row.id)">查看</el-button>
+          <el-button type="primary" link size="small" @click="handleRename(row)">重命名</el-button>
+          <el-button type="warning" link size="small" :loading="reOcringId === row.id" @click="handleReOcr(row.id)">
+            重新 OCR
+          </el-button>
+          <el-button type="primary" link size="small" @click="openFile(row.ossUrl)">下载</el-button>
+          <el-popconfirm v-if="canDeleteRow(row)" title="确定要删除这个文档吗？" @confirm="handleDelete(row.id)">
             <template #reference>
-              <el-button type="danger" link size="small">{{ texts.deleteButton }}</el-button>
+              <el-button type="danger" link size="small">删除</el-button>
             </template>
           </el-popconfirm>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="ocrDialogVisible" :title="texts.ocrDialogTitle" width="560px">
+    <el-dialog v-model="ocrDialogVisible" title="OCR 设置" width="560px">
       <el-form label-width="120px">
-        <el-form-item :label="texts.useCustomOcr">
+        <el-form-item label="使用自定义配置">
           <el-switch v-model="ocrSettings.useCustom" />
         </el-form-item>
-        <el-form-item :label="texts.ocrBaseUrl">
-          <el-input v-model="ocrSettings.baseUrl" :placeholder="texts.ocrBaseUrlPlaceholder" :disabled="!ocrSettings.useCustom" />
+        <el-form-item label="Base URL">
+          <el-input
+            v-model="ocrSettings.baseUrl"
+            placeholder="例如：https://dashscope.aliyuncs.com/compatible-mode"
+            :disabled="!ocrSettings.useCustom"
+          />
         </el-form-item>
-        <el-form-item :label="texts.ocrApiKey">
-          <el-input v-model="ocrSettings.apiKey" :placeholder="texts.ocrApiKeyPlaceholder" show-password :disabled="!ocrSettings.useCustom" />
+        <el-form-item label="API Key">
+          <el-input
+            v-model="ocrSettings.apiKey"
+            show-password
+            placeholder="请输入 API Key"
+            :disabled="!ocrSettings.useCustom"
+          />
         </el-form-item>
-        <el-form-item :label="texts.ocrModel">
-          <el-input v-model="ocrSettings.model" :placeholder="texts.ocrModelPlaceholder" :disabled="!ocrSettings.useCustom" />
+        <el-form-item label="模型名称">
+          <el-input
+            v-model="ocrSettings.model"
+            placeholder="请输入 OCR 模型名称"
+            :disabled="!ocrSettings.useCustom"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="resetOcrSettings">{{ texts.resetButton }}</el-button>
-        <el-button @click="ocrDialogVisible = false">{{ texts.cancelButton }}</el-button>
-        <el-button type="primary" @click="saveOcrSettings">{{ texts.saveButton }}</el-button>
+        <el-button @click="resetOcrSettings">重置</el-button>
+        <el-button @click="ocrDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveOcrSettings">保存</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="previewDialogVisible" :title="texts.previewDialogTitle" width="900px">
+    <el-dialog v-model="previewDialogVisible" title="文本预览与编辑" width="900px">
       <div v-if="previewMeta" class="preview-meta">
         <el-tag>{{ previewMeta.fileName }}</el-tag>
-        <el-tag type="info">{{ texts.charCount }}: {{ previewMeta.charCount }}</el-tag>
+        <el-tag type="info">字数：{{ previewMeta.charCount }}</el-tag>
         <el-tag :type="previewMeta.ocrUsed ? 'warning' : 'success'">
-          {{ previewMeta.ocrUsed ? texts.ocrUsedTag : texts.directTextTag }}
+          {{ previewMeta.ocrUsed ? 'OCR' : '直接解析' }}
         </el-tag>
         <el-tag :type="previewMeta.knowledgeScope === 'PUBLIC' ? 'success' : 'info'">
-          {{ previewMeta.knowledgeScope === 'PUBLIC' ? texts.publicTag : texts.privateTag }}
+          {{ previewMeta.knowledgeScope === 'PUBLIC' ? '公共' : '私有' }}
         </el-tag>
       </div>
       <el-input v-model="previewText" type="textarea" :rows="22" />
       <template #footer>
-        <el-button @click="previewDialogVisible = false">{{ texts.cancelButton }}</el-button>
-        <el-button type="primary" :loading="confirming" @click="handleConfirmUpload">{{ texts.confirmUpload }}</el-button>
+        <el-button @click="previewDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="confirming" @click="handleConfirmUpload">确认入库</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="detailDialogVisible" title="文档详情" width="900px">
+      <div v-loading="detailLoading">
+        <div v-if="documentDetail" class="detail-meta">
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="文件名">{{ documentDetail.fileName }}</el-descriptions-item>
+            <el-descriptions-item label="范围">{{ documentDetail.knowledgeScope === 'PUBLIC' ? '公共' : '私有' }}</el-descriptions-item>
+            <el-descriptions-item label="上传人">{{ documentDetail.uploadedByName || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="归属用户">{{ documentDetail.ownerUserName || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="切片数">{{ documentDetail.chunkCount ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ documentDetail.createdAt || '-' }}</el-descriptions-item>
+          </el-descriptions>
+          <div class="detail-text-title">入库文本</div>
+          <el-input :model-value="documentDetail.extractedText || ''" type="textarea" :rows="20" readonly />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="reOcrPreviewDialogVisible" title="重新 OCR 预览" width="900px">
+      <div v-if="reOcrPreviewMeta" class="preview-meta">
+        <el-tag>{{ reOcrPreviewMeta.fileName }}</el-tag>
+        <el-tag type="info">字数：{{ reOcrPreviewMeta.charCount }}</el-tag>
+        <el-tag :type="reOcrPreviewMeta.ocrUsed ? 'warning' : 'success'">
+          {{ reOcrPreviewMeta.ocrUsed ? 'OCR' : '直接解析' }}
+        </el-tag>
+      </div>
+      <el-input v-model="reOcrPreviewText" type="textarea" :rows="22" />
+      <template #footer>
+        <el-button @click="reOcrPreviewDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="reOcrApplying" @click="handleApplyReOcr">覆盖原文档</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
-
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage, type UploadFile, type UploadInstance } from 'element-plus'
+import { ElMessage, ElMessageBox, type UploadFile, type UploadInstance } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import {
   confirmRagDocument,
   deleteRagDocument,
+  getRagDocumentDetail,
   getRagDocuments,
   getRagOcrSettings,
   parseRagDocument,
+  reOcrRagDocumentApply,
+  reOcrRagDocumentPreview,
+  renameRagDocument,
   saveRagOcrSettings,
+  uploadRagDocument,
+  type RagDocumentDetail,
+  type RagDocumentInfo,
   type RagOcrConfig,
   type RagParsePreview
 } from '@/api/rag'
 import { useUserStore } from '@/stores/user'
-
-const texts = {
-  title: '\u77e5\u8bc6\u5e93\u6587\u6863\u4e0a\u4f20',
-  description: '\u5bf9 PDF \u6216\u56fe\u7247\u7c7b\u6587\u6863\uff0c\u7cfb\u7edf\u4f1a\u5148\u505a OCR \u63d0\u53d6\u9884\u89c8\uff0c\u4f60\u53ef\u4ee5\u7f16\u8f91\u786e\u8ba4\u540e\u518d\u5165\u5e93\u3002',
-  dropPrefix: '\u62d6\u62fd\u6587\u4ef6\u5230\u6b64\u5904\uff0c\u6216',
-  dropAction: '\u70b9\u51fb\u9009\u62e9',
-  supportedFormats: '\u652f\u6301 txt\u3001md\u3001pdf\u3001doc\u3001docx\u3001png\u3001jpg\u3001jpeg\u3001webp',
-  publicScope: '\u516c\u6709\u77e5\u8bc6\u5e93',
-  privateScope: '\u6211\u7684\u79c1\u6709\u77e5\u8bc6\u5e93',
-  adminHint: '\u7ba1\u7406\u5458\u53ef\u4e0a\u4f20\u5230\u516c\u6709\u5e93\u6216\u81ea\u5df1\u7684\u79c1\u6709\u5e93\uff1b\u666e\u901a\u7528\u6237\u4ec5\u4e0a\u4f20\u5230\u81ea\u5df1\u7684\u79c1\u6709\u5e93\u3002',
-  userHint: '\u4f60\u4e0a\u4f20\u7684\u6587\u6863\u53ea\u4f1a\u8fdb\u5165\u81ea\u5df1\u7684\u79c1\u6709\u77e5\u8bc6\u5e93\u3002',
-  ocrSettings: 'OCR \u8bbe\u7f6e',
-  parseButton: '\u89e3\u6790\u5e76\u9884\u89c8',
-  visibleTitle: '\u53ef\u89c1\u6587\u6863',
-  searchPlaceholder: '\u641c\u7d22\u6587\u4ef6\u540d',
-  fileName: '\u6587\u4ef6\u540d',
-  scopeLabel: '\u8303\u56f4',
-  publicTag: '\u516c\u6709',
-  privateTag: '\u79c1\u6709',
-  createdAt: '\u4e0a\u4f20\u65f6\u95f4',
-  actionLabel: '\u64cd\u4f5c',
-  deleteConfirm: '\u786e\u5b9a\u5220\u9664\u6b64\u6587\u6863\uff1f',
-  deleteButton: '\u5220\u9664',
-  ocrDialogTitle: 'OCR \u6a21\u578b\u8bbe\u7f6e',
-  useCustomOcr: '\u4f7f\u7528\u81ea\u5b9a\u4e49 OCR',
-  ocrBaseUrl: 'Base URL',
-  ocrApiKey: 'API Key',
-  ocrModel: '\u6a21\u578b\u540d',
-  ocrBaseUrlPlaceholder: '\u4ec5\u5f53\u524d\u7528\u6237\u751f\u6548\uff0c\u4e0d\u586b\u5219\u4f7f\u7528\u540e\u7aef\u9ed8\u8ba4 OCR',
-  ocrApiKeyPlaceholder: '\u4ec5\u5f53\u524d\u7528\u6237\u751f\u6548',
-  ocrModelPlaceholder: '\u4f8b\u5982 qwen3-vl-plus-2025-12-19',
-  resetButton: '\u91cd\u7f6e',
-  cancelButton: '\u53d6\u6d88',
-  saveButton: '\u4fdd\u5b58',
-  previewDialogTitle: '\u6587\u672c\u9884\u89c8\u4e0e\u7f16\u8f91',
-  charCount: '\u5b57\u6570',
-  ocrUsedTag: 'OCR',
-  directTextTag: '\u76f4\u63a5\u62bd\u53d6',
-  confirmUpload: '\u786e\u8ba4\u5165\u5e93',
-  parseSuccess: '\u6587\u6863\u89e3\u6790\u5b8c\u6210\uff0c\u8bf7\u68c0\u67e5\u6587\u672c\u540e\u786e\u8ba4\u5165\u5e93',
-  saveSettingsSuccess: 'OCR \u8bbe\u7f6e\u5df2\u4fdd\u5b58',
-  uploadSuccess: '\u6587\u6863\u5165\u5e93\u6210\u529f',
-  deleteSuccess: '\u5220\u9664\u6210\u529f',
-  previewEmpty: '\u6682\u672a\u89e3\u6790\u51fa\u5185\u5bb9\uff0c\u8bf7\u5148\u68c0\u67e5\u6587\u4ef6\u6216 OCR \u914d\u7f6e'
-} as const
 
 type ScopeValue = 'PUBLIC' | 'PRIVATE'
 
@@ -176,9 +246,13 @@ const selectedFile = ref<File | null>(null)
 const selectedScope = ref<ScopeValue>('PRIVATE')
 const parsing = ref(false)
 const confirming = ref(false)
-const documents = ref<any[]>([])
+const uploadingDirect = ref(false)
+
+const documents = ref<RagDocumentInfo[]>([])
 const loadingDocs = ref(false)
 const searchKey = ref('')
+const documentScopeFilter = ref<'ALL' | ScopeValue>('ALL')
+
 const ocrDialogVisible = ref(false)
 const previewDialogVisible = ref(false)
 const previewText = ref('')
@@ -190,14 +264,84 @@ const ocrSettings = ref({
   model: ''
 })
 
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const documentDetail = ref<RagDocumentDetail | null>(null)
+
+const reOcringId = ref<number | null>(null)
+const reOcrPreviewDialogVisible = ref(false)
+const reOcrPreviewText = ref('')
+const reOcrPreviewMeta = ref<RagParsePreview | null>(null)
+const reOcrTargetId = ref<number | null>(null)
+const reOcrApplying = ref(false)
+
+const selectedFileName = computed(() => selectedFile.value?.name || '')
+
+const selectedFileExt = computed(() => {
+  const fileName = selectedFileName.value
+  const lastDotIndex = fileName.lastIndexOf('.')
+  return lastDotIndex >= 0 ? fileName.substring(lastDotIndex + 1).toLowerCase() : ''
+})
+
+const isOcrRecommended = computed(() => ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(selectedFileExt.value))
+
+const processHint = computed(() => {
+  if (!selectedFile.value) {
+    return '请先选择文件。普通文档建议直接入库；扫描件、图片或版式复杂的 PDF 建议先做 OCR 预览。'
+  }
+  if (isOcrRecommended.value) {
+    return '当前文件更适合先进行 OCR 预览，确认识别结果后再入库。'
+  }
+  return '当前文件可直接入库；如果想先检查抽取文本，也可以选择 OCR 预览。'
+})
+
 const filteredDocuments = computed(() => {
-  if (!searchKey.value) return documents.value
-  const keyword = searchKey.value.toLowerCase()
-  return documents.value.filter((doc: any) => doc.fileName?.toLowerCase().includes(keyword))
+  const keyword = searchKey.value.trim().toLowerCase()
+  return documents.value.filter((doc) => {
+    const matchScope = documentScopeFilter.value === 'ALL' || doc.knowledgeScope === documentScopeFilter.value
+    const matchKeyword = !keyword || doc.fileName?.toLowerCase().includes(keyword)
+    return matchScope && matchKeyword
+  })
 })
 
 function currentScope(): ScopeValue {
   return userStore.role === 'ADMIN' ? selectedScope.value : 'PRIVATE'
+}
+
+function buildCustomOcrConfig(): RagOcrConfig | undefined {
+  if (!ocrSettings.value.useCustom) return undefined
+  if (!ocrSettings.value.baseUrl || !ocrSettings.value.apiKey || !ocrSettings.value.model) return undefined
+  return {
+    baseUrl: ocrSettings.value.baseUrl.trim(),
+    apiKey: ocrSettings.value.apiKey.trim(),
+    model: ocrSettings.value.model.trim()
+  }
+}
+
+function handleChange(file: UploadFile) {
+  selectedFile.value = file.raw || null
+  previewDialogVisible.value = false
+  previewMeta.value = null
+  previewText.value = ''
+}
+
+function resetUploadState() {
+  previewDialogVisible.value = false
+  previewMeta.value = null
+  previewText.value = ''
+  selectedFile.value = null
+  uploadRef.value?.clearFiles()
+}
+
+function canDeleteRow(row: RagDocumentInfo) {
+  if (row.knowledgeScope === 'PUBLIC') {
+    return userStore.role === 'ADMIN'
+  }
+  return row.ownerUserId === userStore.id
+}
+
+function openFile(url: string) {
+  window.open(url, '_blank')
 }
 
 async function loadOcrSettings() {
@@ -205,9 +349,9 @@ async function loadOcrSettings() {
     const parsed = await getRagOcrSettings()
     ocrSettings.value = {
       useCustom: !!(parsed?.baseUrl || parsed?.apiKey || parsed?.model),
-      baseUrl: parsed.baseUrl || '',
-      apiKey: parsed.apiKey || '',
-      model: parsed.model || ''
+      baseUrl: parsed?.baseUrl || '',
+      apiKey: parsed?.apiKey || '',
+      model: parsed?.model || ''
     }
   } catch {
     ocrSettings.value = { useCustom: false, baseUrl: '', apiKey: '', model: '' }
@@ -225,34 +369,11 @@ async function saveOcrSettings() {
 
   await saveRagOcrSettings(payload)
   ocrDialogVisible.value = false
-  ElMessage.success(texts.saveSettingsSuccess)
+  ElMessage.success('OCR 设置已保存')
 }
 
 function resetOcrSettings() {
   ocrSettings.value = { useCustom: false, baseUrl: '', apiKey: '', model: '' }
-}
-
-function buildCustomOcrConfig(): RagOcrConfig | undefined {
-  if (!ocrSettings.value.useCustom) return undefined
-  if (!ocrSettings.value.baseUrl || !ocrSettings.value.apiKey || !ocrSettings.value.model) return undefined
-  return {
-    baseUrl: ocrSettings.value.baseUrl.trim(),
-    apiKey: ocrSettings.value.apiKey.trim(),
-    model: ocrSettings.value.model.trim()
-  }
-}
-
-function handleChange(file: UploadFile) {
-  selectedFile.value = file.raw || null
-  previewMeta.value = null
-  previewText.value = ''
-}
-
-function canDeleteRow(row: any) {
-  if (row.knowledgeScope === 'PUBLIC') {
-    return userStore.role === 'ADMIN'
-  }
-  return row.ownerUserId === userStore.id
 }
 
 async function fetchDocuments() {
@@ -272,9 +393,22 @@ async function handleParse() {
     previewMeta.value = preview
     previewText.value = preview.extractedText || ''
     previewDialogVisible.value = true
-    ElMessage.success(preview.extractedText ? texts.parseSuccess : texts.previewEmpty)
+    ElMessage.success(preview.extractedText ? '文档解析完成，请确认后入库' : '未提取到文本，请检查文件或 OCR 配置')
   } finally {
     parsing.value = false
+  }
+}
+
+async function handleDirectUpload() {
+  if (!selectedFile.value) return
+  uploadingDirect.value = true
+  try {
+    await uploadRagDocument(selectedFile.value, currentScope())
+    ElMessage.success('文档已直接上传到知识库')
+    resetUploadState()
+    await fetchDocuments()
+  } finally {
+    uploadingDirect.value = false
   }
 }
 
@@ -283,21 +417,72 @@ async function handleConfirmUpload() {
   confirming.value = true
   try {
     await confirmRagDocument(selectedFile.value, previewText.value, currentScope())
-    ElMessage.success(texts.uploadSuccess)
-    previewDialogVisible.value = false
-    previewMeta.value = null
-    previewText.value = ''
-    selectedFile.value = null
-    uploadRef.value?.clearFiles()
+    ElMessage.success('文档入库成功')
+    resetUploadState()
     await fetchDocuments()
   } finally {
     confirming.value = false
   }
 }
 
+async function openDocumentDetail(id: number) {
+  detailDialogVisible.value = true
+  detailLoading.value = true
+  documentDetail.value = null
+  try {
+    documentDetail.value = await getRagDocumentDetail(id)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+async function handleRename(row: RagDocumentInfo) {
+  const result = await ElMessageBox.prompt('请输入新的文档名称', '重命名文档', {
+    inputValue: row.fileName,
+    confirmButtonText: '确定',
+    cancelButtonText: '取消'
+  }).catch(() => null)
+  if (!result?.value) return
+  await renameRagDocument(row.id, result.value)
+  ElMessage.success('文档名称已更新')
+  await fetchDocuments()
+  if (documentDetail.value?.id === row.id) {
+    await openDocumentDetail(row.id)
+  }
+}
+
+async function handleReOcr(id: number) {
+  reOcringId.value = id
+  try {
+    const preview = await reOcrRagDocumentPreview(id)
+    reOcrTargetId.value = id
+    reOcrPreviewMeta.value = preview
+    reOcrPreviewText.value = preview.extractedText || ''
+    reOcrPreviewDialogVisible.value = true
+  } finally {
+    reOcringId.value = null
+  }
+}
+
+async function handleApplyReOcr() {
+  if (reOcrTargetId.value == null) return
+  reOcrApplying.value = true
+  try {
+    await reOcrRagDocumentApply(reOcrTargetId.value, reOcrPreviewText.value)
+    ElMessage.success('重新 OCR 结果已覆盖原文档')
+    reOcrPreviewDialogVisible.value = false
+    await fetchDocuments()
+    if (documentDetail.value?.id === reOcrTargetId.value) {
+      await openDocumentDetail(reOcrTargetId.value)
+    }
+  } finally {
+    reOcrApplying.value = false
+  }
+}
+
 async function handleDelete(id: number) {
   await deleteRagDocument(id)
-  ElMessage.success(texts.deleteSuccess)
+  ElMessage.success('文档已删除')
   await fetchDocuments()
 }
 
@@ -308,8 +493,110 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.rag-container { padding: 20px; max-width: 1000px; }
-.desc { color: #909399; margin-bottom: 20px; font-size: 14px; }
-.actions-row { display: flex; gap: 12px; margin-top: 16px; }
-.preview-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.rag-container {
+  padding: 20px;
+  max-width: 1200px;
+}
+
+.desc {
+  color: #909399;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.upload-panel,
+.process-panel {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--el-bg-color);
+}
+
+.process-panel {
+  margin-top: 16px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.panel-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.scope-switch {
+  margin-top: 16px;
+}
+
+.upload-note {
+  margin: 10px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.process-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.process-hint {
+  margin: 12px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.process-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.docs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 32px 0 12px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.docs-filters {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.preview-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-text-title {
+  font-weight: 600;
+}
 </style>

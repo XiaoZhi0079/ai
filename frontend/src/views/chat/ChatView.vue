@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="chat-container">
     <div class="chat-sidebar">
       <div class="sidebar-header">
@@ -111,6 +111,7 @@ const texts = {
   imagePromptPrefix: '\u3010\u6587\u751f\u56fe\u3011'
 } as const
 
+// Reactive state for the chat page lives in one place for easier maintenance.
 const userStore = useUserStore()
 const messagesRef = ref<HTMLElement>()
 const messages = ref<MessageVO[]>([])
@@ -125,10 +126,12 @@ const currentChatId = ref('')
 const historyItems = ref<ConversationItem[]>([])
 const uploadedImages = ref<ImagesResponse[]>([])
 
+// Generate a lightweight client-side conversation id before the backend stores history.
 function generateChatId() {
   return 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8)
 }
 
+// Reset the visible state and start a fresh conversation.
 function newChat() {
   currentChatId.value = generateChatId()
   messages.value = []
@@ -136,6 +139,7 @@ function newChat() {
   userInput.value = ''
 }
 
+// Load the conversation list shown in the left sidebar.
 async function loadHistoryList() {
   try {
     historyItems.value = (await getHistoryList()) || []
@@ -143,6 +147,7 @@ async function loadHistoryList() {
   }
 }
 
+// Restore a previous conversation into the current view.
 async function loadChat(chatId: string) {
   currentChatId.value = chatId
   try {
@@ -152,6 +157,7 @@ async function loadChat(chatId: string) {
   }
 }
 
+// Upload images immediately so the returned URLs can be sent with the chat request.
 async function handleImageUpload(file: File) {
   try {
     const response = await uploadImages([file])
@@ -172,18 +178,21 @@ function scrollToBottom() {
   })
 }
 
+// Lazily create the current chat id so unsent drafts do not create history records.
 function ensureCurrentChat() {
   if (!currentChatId.value) {
     currentChatId.value = generateChatId()
   }
 }
 
+// Add a provisional title locally so the new chat appears in the sidebar right away.
 function appendNewHistoryTitle(title: string) {
   if (!historyItems.value.some((item) => item.chatId === currentChatId.value)) {
     historyItems.value.unshift({ chatId: currentChatId.value, title: title.substring(0, 50) || null })
   }
 }
 
+// Push the user message to the UI first, then reconcile with the backend response.
 async function sendMessage() {
   const input = userInput.value.trim()
   if (!input || sending.value || generatingImage.value) return
@@ -220,6 +229,7 @@ async function sendMessage() {
   }
 }
 
+// Image generation shares the same chat history so prompts and results stay together.
 async function handleGenerateImage() {
   const prompt = userInput.value.trim()
   if (!prompt || generatingImage.value || sending.value) return
@@ -247,6 +257,7 @@ async function handleGenerateImage() {
   }
 }
 
+// Fetch available models once on page mount and preselect the first option.
 async function loadModelOptions() {
   modelsLoading.value = true
   try {
@@ -291,3 +302,4 @@ onMounted(() => {
 .chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #e4e7ed; }
 .chat-input .el-textarea { flex: 1; }
 </style>
+

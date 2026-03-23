@@ -2,11 +2,8 @@ package com.example.ai.pojo;
 
 import lombok.Data;
 
-import java.time.LocalDateTime;
-
 @Data
-public class RagDocumentInfo {
-
+public class RagDocumentDetail {
     private Integer id;
     private String fileName;
     private String ossUrl;
@@ -17,6 +14,6 @@ public class RagDocumentInfo {
     private String knowledgeScope;
     private Integer chunkCount;
     private String extractedText;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private java.time.LocalDateTime createdAt;
+    private java.time.LocalDateTime updatedAt;
 }
