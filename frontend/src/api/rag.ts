@@ -9,6 +9,8 @@ export interface RagOcrConfig {
 export interface RagParsePreview {
   fileName: string
   extractedText: string
+  structuredText: string
+  ocrText: string
   ocrUsed: boolean
   charCount: number
   knowledgeScope: 'PUBLIC' | 'PRIVATE'

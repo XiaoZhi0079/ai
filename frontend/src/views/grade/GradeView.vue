@@ -27,11 +27,18 @@ const courseApi = createCrudApi<Course>('/api/courses')
 
 const studentOptions = ref<Array<{ label: string; value: number }>>([])
 const courseOptions = ref<Array<{ label: string; value: number }>>([])
+const semesterOptions = ref<Array<{ label: string; value: number }>>(buildSemesterOptions())
 
-const semesterOptions = [1, 2, 3, 4, 5, 6, 7, 8].map((semester) => ({
-  label: `第${semester}学期`,
-  value: semester
-}))
+function buildSemesterOptions(extraYears: number[] = []) {
+  const currentYear = new Date().getFullYear()
+  const defaultYears = Array.from({ length: 6 }, (_, index) => currentYear + 1 - index)
+  return Array.from(new Set([...extraYears, ...defaultYears]))
+    .sort((left, right) => right - left)
+    .map((year) => ({
+      label: String(year),
+      value: year
+    }))
+}
 
 const api = {
   ...gradeApi,
@@ -41,6 +48,11 @@ const api = {
       studentApi.list(),
       courseApi.list()
     ])
+    semesterOptions.value = buildSemesterOptions(
+      grades
+        .map((grade) => grade.semester)
+        .filter((semester): semester is number => semester != null)
+    )
     const studentMap = new Map(students.map((student) => [student.id, student.name]))
     const courseMap = new Map(courses.map((course) => [course.id, course.courseName]))
     return grades.map((grade) => ({
@@ -58,7 +70,7 @@ const columns = computed<Column[]>(() => [
   { prop: 'courseName', label: '课程名称', tableOnly: true },
   { prop: 'courseId', label: '课程', type: 'select', options: courseOptions.value, formOnly: true },
   { prop: 'score', label: '成绩', type: 'number', precision: 1 },
-  { prop: 'semester', label: '学期', type: 'select', options: semesterOptions }
+  { prop: 'semester', label: '学年', type: 'select', options: semesterOptions.value }
 ])
 
 const searchConfig: SearchConfig = {
@@ -66,9 +78,9 @@ const searchConfig: SearchConfig = {
   placeholder: '按学生姓名或课程名称搜索'
 }
 
-const filterConfigs: FilterConfig[] = [
-  { prop: 'semester', label: '学期', options: semesterOptions }
-]
+const filterConfigs = computed<FilterConfig[]>(() => [
+  { prop: 'semester', label: '学年', options: semesterOptions.value }
+])
 
 const rules = {
   studentId: [{ required: true, message: '请选择学生', trigger: 'change' }],
@@ -76,7 +88,12 @@ const rules = {
   score: [{ required: true, message: '请输入成绩', trigger: 'blur' }]
 }
 
-const defaultForm = () => ({ studentId: undefined, courseId: undefined, score: 0, semester: 1 })
+const defaultForm = () => ({
+  studentId: undefined,
+  courseId: undefined,
+  score: 0,
+  semester: semesterOptions.value[0]?.value ?? new Date().getFullYear()
+})
 
 async function loadOptions() {
   const [students, courses] = await Promise.all([studentApi.list(), courseApi.list()])

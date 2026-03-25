@@ -180,6 +180,18 @@
             <version>3.0.5</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.4.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>5.4.1</version>
+        </dependency>
+
         <!-- Hutool 核心包（包含 JSONUtil 等所有基础工具） -->
         <dependency>
             <groupId>cn.hutool</groupId>

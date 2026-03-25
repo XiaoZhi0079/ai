@@ -44,32 +44,27 @@
     </div>
 
     <div class="process-panel">
-      <div class="panel-title">处理方式</div>
+      <div class="panel-title">入库操作</div>
       <div class="process-meta">
         <el-tag v-if="selectedFileName">{{ selectedFileName }}</el-tag>
-        <el-tag v-if="selectedFileName" :type="isOcrRecommended ? 'warning' : 'success'">
-          {{ isOcrRecommended ? '推荐：OCR 预览' : '推荐：直接入库' }}
+        <el-tag v-if="selectedFileName" :type="isOcrRequired ? 'danger' : 'success'">
+          {{ isOcrRequired ? '必须：先 OCR 预览' : '建议：直接入库' }}
         </el-tag>
       </div>
       <p class="process-hint">{{ processHint }}</p>
-      <div class="process-actions">
+      <div class="primary-action-row">
         <el-button
-          :type="isOcrRecommended ? 'default' : 'primary'"
-          :plain="isOcrRecommended"
-          :loading="uploadingDirect"
+          type="primary"
+          :loading="isOcrRequired ? parsing : uploadingDirect"
           :disabled="!selectedFile"
-          @click="handleDirectUpload"
+          @click="handlePrimaryAction"
         >
-          直接入库
+          {{ isOcrRequired ? '先 OCR 预览' : '上传并入库' }}
         </el-button>
-        <el-button
-          :type="isOcrRecommended ? 'primary' : 'default'"
-          :plain="!isOcrRecommended"
-          :loading="parsing"
-          :disabled="!selectedFile"
-          @click="handleParse"
-        >
-          先 OCR 预览
+      </div>
+      <div v-if="!isOcrRequired" class="secondary-action-row">
+        <el-button link type="primary" :loading="parsing" :disabled="!selectedFile" @click="handleParse">
+          需要先识别文本？试试 OCR 预览
         </el-button>
       </div>
     </div>
@@ -171,7 +166,14 @@
           {{ previewMeta.knowledgeScope === 'PUBLIC' ? '公共' : '私有' }}
         </el-tag>
       </div>
-      <el-input v-model="previewText" type="textarea" :rows="22" />
+      <div v-if="showStructuredSection(previewMeta)" class="preview-section">
+        <div class="preview-section-title">{{ showOcrSection(previewMeta) ? '正文文本' : '解析文本' }}</div>
+        <el-input v-model="previewStructuredText" type="textarea" :rows="showOcrSection(previewMeta) ? 12 : 22" />
+      </div>
+      <div v-if="showOcrSection(previewMeta)" class="preview-section">
+        <div class="preview-section-title">{{ showStructuredSection(previewMeta) ? '图片 OCR 文本' : 'OCR 文本' }}</div>
+        <el-input v-model="previewOcrText" type="textarea" :rows="showStructuredSection(previewMeta) ? 10 : 22" />
+      </div>
       <template #footer>
         <el-button @click="previewDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="confirming" @click="handleConfirmUpload">确认入库</el-button>
@@ -206,7 +208,14 @@
           {{ reOcrPreviewMeta.ocrUsed ? 'OCR' : '直接解析' }}
         </el-tag>
       </div>
-      <el-input v-model="reOcrPreviewText" type="textarea" :rows="22" />
+      <div v-if="showStructuredSection(reOcrPreviewMeta)" class="preview-section">
+        <div class="preview-section-title">{{ showOcrSection(reOcrPreviewMeta) ? '正文文本' : '解析文本' }}</div>
+        <el-input v-model="reOcrStructuredText" type="textarea" :rows="showOcrSection(reOcrPreviewMeta) ? 12 : 22" />
+      </div>
+      <div v-if="showOcrSection(reOcrPreviewMeta)" class="preview-section">
+        <div class="preview-section-title">{{ showStructuredSection(reOcrPreviewMeta) ? '图片 OCR 文本' : 'OCR 文本' }}</div>
+        <el-input v-model="reOcrOcrText" type="textarea" :rows="showStructuredSection(reOcrPreviewMeta) ? 10 : 22" />
+      </div>
       <template #footer>
         <el-button @click="reOcrPreviewDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="reOcrApplying" @click="handleApplyReOcr">覆盖原文档</el-button>
@@ -255,7 +264,8 @@ const documentScopeFilter = ref<'ALL' | ScopeValue>('ALL')
 
 const ocrDialogVisible = ref(false)
 const previewDialogVisible = ref(false)
-const previewText = ref('')
+const previewStructuredText = ref('')
+const previewOcrText = ref('')
 const previewMeta = ref<RagParsePreview | null>(null)
 const ocrSettings = ref({
   useCustom: false,
@@ -270,7 +280,8 @@ const documentDetail = ref<RagDocumentDetail | null>(null)
 
 const reOcringId = ref<number | null>(null)
 const reOcrPreviewDialogVisible = ref(false)
-const reOcrPreviewText = ref('')
+const reOcrStructuredText = ref('')
+const reOcrOcrText = ref('')
 const reOcrPreviewMeta = ref<RagParsePreview | null>(null)
 const reOcrTargetId = ref<number | null>(null)
 const reOcrApplying = ref(false)
@@ -283,16 +294,25 @@ const selectedFileExt = computed(() => {
   return lastDotIndex >= 0 ? fileName.substring(lastDotIndex + 1).toLowerCase() : ''
 })
 
-const isOcrRecommended = computed(() => ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(selectedFileExt.value))
+const isOcrRequired = computed(() => ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(selectedFileExt.value))
 
 const processHint = computed(() => {
   if (!selectedFile.value) {
-    return '请先选择文件。普通文档建议直接入库；扫描件、图片或版式复杂的 PDF 建议先做 OCR 预览。'
+    return '请先选择文件。普通文档可直接上传并入库；PDF 和图片文件必须先做 OCR 预览。docx 会自动识别内嵌图片文字，Markdown 仅解析文本内容。'
   }
-  if (isOcrRecommended.value) {
-    return '当前文件更适合先进行 OCR 预览，确认识别结果后再入库。'
+  if (isOcrRequired.value) {
+    return '当前文件属于 PDF 或图片类型，必须先进行 OCR 预览，确认识别结果后才能入库。'
   }
-  return '当前文件可直接入库；如果想先检查抽取文本，也可以选择 OCR 预览。'
+  if (selectedFileExt.value === 'docx') {
+    return '当前是 docx 文档：正文会直接提取；若存在内嵌图片，会尝试 OCR 后一并入库，图片 OCR 失败不会影响正文入库。'
+  }
+  if (selectedFileExt.value === 'doc') {
+    return '当前是 doc 文档：正文会直接提取；若存在内嵌图片，会尝试 OCR 后一并入库，图片 OCR 失败不会影响正文入库。'
+  }
+  if (selectedFileExt.value === 'md') {
+    return '当前是 Markdown 文档：目前只解析 .md 文件中的文本内容，不会跟随图片链接自动 OCR。'
+  }
+  return '当前文件可直接上传并入库；如果想先检查抽取文本，也可以使用 OCR 预览。'
 })
 
 const filteredDocuments = computed(() => {
@@ -322,15 +342,46 @@ function handleChange(file: UploadFile) {
   selectedFile.value = file.raw || null
   previewDialogVisible.value = false
   previewMeta.value = null
-  previewText.value = ''
+  previewStructuredText.value = ''
+  previewOcrText.value = ''
+}
+
+function handlePrimaryAction() {
+  if (isOcrRequired.value) {
+    return handleParse()
+  }
+  return handleDirectUpload()
 }
 
 function resetUploadState() {
   previewDialogVisible.value = false
   previewMeta.value = null
-  previewText.value = ''
+  previewStructuredText.value = ''
+  previewOcrText.value = ''
   selectedFile.value = null
   uploadRef.value?.clearFiles()
+}
+
+function showStructuredSection(preview: RagParsePreview | null) {
+  return !!preview && (!!preview.structuredText || !preview.ocrText)
+}
+
+function showOcrSection(preview: RagParsePreview | null) {
+  return !!preview && !!preview.ocrText
+}
+
+function buildPreviewCombinedText(structuredText: string, ocrText: string) {
+  const sections: string[] = []
+  const normalizedStructuredText = structuredText.trim()
+  const normalizedOcrText = ocrText.trim()
+
+  if (normalizedStructuredText) {
+    sections.push(normalizedStructuredText)
+  }
+  if (normalizedOcrText) {
+    sections.push(normalizedStructuredText ? `[图片 OCR 文本]\n${normalizedOcrText}` : normalizedOcrText)
+  }
+  return sections.join('\n\n')
 }
 
 function canDeleteRow(row: RagDocumentInfo) {
@@ -391,7 +442,8 @@ async function handleParse() {
   try {
     const preview = await parseRagDocument(selectedFile.value, currentScope(), buildCustomOcrConfig())
     previewMeta.value = preview
-    previewText.value = preview.extractedText || ''
+    previewStructuredText.value = preview.structuredText || ''
+    previewOcrText.value = preview.ocrText || ''
     previewDialogVisible.value = true
     ElMessage.success(preview.extractedText ? '文档解析完成，请确认后入库' : '未提取到文本，请检查文件或 OCR 配置')
   } finally {
@@ -401,6 +453,10 @@ async function handleParse() {
 
 async function handleDirectUpload() {
   if (!selectedFile.value) return
+  if (isOcrRequired.value) {
+    ElMessage.warning('PDF 和图片文件必须先进行 OCR 预览')
+    return
+  }
   uploadingDirect.value = true
   try {
     await uploadRagDocument(selectedFile.value, currentScope())
@@ -416,7 +472,11 @@ async function handleConfirmUpload() {
   if (!selectedFile.value) return
   confirming.value = true
   try {
-    await confirmRagDocument(selectedFile.value, previewText.value, currentScope())
+    await confirmRagDocument(
+      selectedFile.value,
+      buildPreviewCombinedText(previewStructuredText.value, previewOcrText.value),
+      currentScope()
+    )
     ElMessage.success('文档入库成功')
     resetUploadState()
     await fetchDocuments()
@@ -457,7 +517,8 @@ async function handleReOcr(id: number) {
     const preview = await reOcrRagDocumentPreview(id)
     reOcrTargetId.value = id
     reOcrPreviewMeta.value = preview
-    reOcrPreviewText.value = preview.extractedText || ''
+    reOcrStructuredText.value = preview.structuredText || ''
+    reOcrOcrText.value = preview.ocrText || ''
     reOcrPreviewDialogVisible.value = true
   } finally {
     reOcringId.value = null
@@ -468,7 +529,10 @@ async function handleApplyReOcr() {
   if (reOcrTargetId.value == null) return
   reOcrApplying.value = true
   try {
-    await reOcrRagDocumentApply(reOcrTargetId.value, reOcrPreviewText.value)
+    await reOcrRagDocumentApply(
+      reOcrTargetId.value,
+      buildPreviewCombinedText(reOcrStructuredText.value, reOcrOcrText.value)
+    )
     ElMessage.success('重新 OCR 结果已覆盖原文档')
     reOcrPreviewDialogVisible.value = false
     await fetchDocuments()
@@ -560,11 +624,16 @@ onMounted(async () => {
   line-height: 1.6;
 }
 
-.process-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+.primary-action-row {
   margin-top: 14px;
+}
+
+.secondary-action-row {
+  margin-top: 8px;
+}
+
+.secondary-action-row :deep(.el-button) {
+  padding-left: 0;
 }
 
 .docs-header {
@@ -588,6 +657,17 @@ onMounted(async () => {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+.preview-section + .preview-section {
+  margin-top: 14px;
+}
+
+.preview-section-title {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 
 .detail-meta {

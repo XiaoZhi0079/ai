@@ -117,6 +117,9 @@ public class RagController {
         if (userId == null) {
             return LeeResult.fail(401, "Missing user");
         }
+        if (mustUseOcrPreview(file)) {
+            return LeeResult.fail("PDF 和图片文件必须先进行 OCR 预览，再确认入库");
+        }
 
         String knowledgeScope = resolveScope(scope, currentRole(request));
         RagParsePreview preview = ragParseService.parse(file, knowledgeScope,
@@ -330,6 +333,32 @@ public class RagController {
             return trimmed;
         }
         return trimmed + currentFileName.substring(currentDot);
+    }
+
+    private boolean mustUseOcrPreview(MultipartFile file) {
+        if (file == null) {
+            return false;
+        }
+        String fileName = file.getOriginalFilename();
+        String contentType = file.getContentType();
+        return isPdf(fileName, contentType) || isImage(fileName, contentType);
+    }
+
+    private boolean isPdf(String fileName, String contentType) {
+        return (StringUtils.hasText(fileName) && fileName.toLowerCase().endsWith(".pdf"))
+                || "application/pdf".equalsIgnoreCase(contentType);
+    }
+
+    private boolean isImage(String fileName, String contentType) {
+        if (StringUtils.hasText(contentType) && contentType.toLowerCase().startsWith("image/")) {
+            return true;
+        }
+        if (!StringUtils.hasText(fileName)) {
+            return false;
+        }
+        String lower = fileName.toLowerCase();
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+                || lower.endsWith(".bmp") || lower.endsWith(".webp");
     }
 
     private MultipartFile downloadMultipartFile(RagDocumentInfo document) throws IOException {

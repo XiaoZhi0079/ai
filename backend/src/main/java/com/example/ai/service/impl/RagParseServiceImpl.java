@@ -5,6 +5,14 @@ import com.example.ai.pojo.RagOcrRequestConfig;
 import com.example.ai.pojo.RagParsePreview;
 import com.example.ai.service.RagParseService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.hwpf.HWPFDocument;
+import org.apache.poi.hwpf.extractor.WordExtractor;
+import org.apache.poi.hwpf.model.PicturesTable;
+import org.apache.poi.hwpf.usermodel.Picture;
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFPictureData;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
@@ -27,15 +35,18 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RagParseServiceImpl implements RagParseService {
 
     private final RagOcrProperties ragOcrProperties;
@@ -43,36 +54,154 @@ public class RagParseServiceImpl implements RagParseService {
     @Override
     public RagParsePreview parse(MultipartFile file, String knowledgeScope, RagOcrRequestConfig requestConfig) throws IOException {
         String fileName = file.getOriginalFilename();
-        String extractedText;
-        boolean ocrUsed;
+        StructuredExtractionResult extractionResult;
 
         if (isPdf(fileName, file.getContentType())) {
-            extractedText = extractPdfText(file, requestConfig);
-            ocrUsed = true;
+            extractionResult = new StructuredExtractionResult("", extractPdfText(file, requestConfig), true);
         } else if (isImage(file.getContentType(), fileName)) {
-            extractedText = extractImageText(file, requestConfig);
-            ocrUsed = true;
+            extractionResult = new StructuredExtractionResult("", extractImageText(file, requestConfig), true);
         } else {
-            extractedText = extractStructuredText(file);
-            ocrUsed = false;
+            extractionResult = extractStructuredText(file, requestConfig);
         }
+
+        String extractedText = mergePreviewSections(extractionResult.structuredText(), extractionResult.ocrText());
 
         RagParsePreview preview = new RagParsePreview();
         preview.setFileName(fileName);
         preview.setExtractedText(normalizeText(extractedText));
-        preview.setOcrUsed(ocrUsed);
+        preview.setStructuredText(normalizeText(extractionResult.structuredText()));
+        preview.setOcrText(normalizeText(extractionResult.ocrText()));
+        preview.setOcrUsed(extractionResult.ocrUsed());
         preview.setCharCount(preview.getExtractedText() == null ? 0 : preview.getExtractedText().length());
         preview.setKnowledgeScope(knowledgeScope);
         return preview;
     }
 
-    private String extractStructuredText(MultipartFile file) throws IOException {
+    private StructuredExtractionResult extractStructuredText(MultipartFile file, RagOcrRequestConfig requestConfig) throws IOException {
         String fileName = file.getOriginalFilename();
         if (fileName != null && (fileName.endsWith(".txt") || fileName.endsWith(".md"))) {
-            return new String(file.getBytes(), StandardCharsets.UTF_8);
+            return new StructuredExtractionResult(new String(file.getBytes(), StandardCharsets.UTF_8), "", false);
+        }
+        if (isDoc(fileName)) {
+            return extractDocText(file, requestConfig);
+        }
+        if (isDocx(fileName)) {
+            return extractDocxText(file, requestConfig);
         }
         TikaDocumentReader reader = new TikaDocumentReader(file.getResource());
-        return joinDocuments(reader.get());
+        return new StructuredExtractionResult(joinDocuments(reader.get()), "", false);
+    }
+
+    private StructuredExtractionResult extractDocText(MultipartFile file, RagOcrRequestConfig requestConfig) throws IOException {
+        byte[] bytes = file.getBytes();
+        try (HWPFDocument document = new HWPFDocument(new ByteArrayInputStream(bytes));
+             WordExtractor extractor = new WordExtractor(document)) {
+            String text = normalizeText(extractor.getText());
+            PicturesTable picturesTable = document.getPicturesTable();
+            String ocrText = picturesTable == null
+                    ? ""
+                    : extractEmbeddedDocImageText(picturesTable.getAllPictures(), requestConfig);
+            return new StructuredExtractionResult(text, ocrText, StringUtils.hasText(ocrText));
+        }
+    }
+
+    private StructuredExtractionResult extractDocxText(MultipartFile file, RagOcrRequestConfig requestConfig) throws IOException {
+        byte[] bytes = file.getBytes();
+        try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(bytes));
+             XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
+            String text = normalizeText(extractor.getText());
+            String ocrText = extractEmbeddedImageText(document.getAllPictures(), requestConfig);
+            return new StructuredExtractionResult(text, ocrText, StringUtils.hasText(ocrText));
+        }
+    }
+
+    private String extractEmbeddedImageText(List<XWPFPictureData> pictures, RagOcrRequestConfig requestConfig) {
+        if (pictures == null || pictures.isEmpty()) {
+            return "";
+        }
+        int maxImages = ragOcrProperties.getMaxEmbeddedImages() == null ? 0 : ragOcrProperties.getMaxEmbeddedImages();
+        if (maxImages <= 0) {
+            return "";
+        }
+
+        List<String> imageTexts = new ArrayList<>();
+        int count = Math.min(pictures.size(), maxImages);
+        for (int index = 0; index < count; index++) {
+            XWPFPictureData picture = pictures.get(index);
+            byte[] imageBytes = picture.getData();
+            if (imageBytes == null || imageBytes.length == 0) {
+                continue;
+            }
+
+            String fileName = picture.getFileName();
+            if (!StringUtils.hasText(fileName)) {
+                String ext = picture.suggestFileExtension();
+                fileName = "embedded-image-" + (index + 1) + (StringUtils.hasText(ext) ? "." + ext : "");
+            }
+            String contentType = picture.getPackagePart() == null ? null : picture.getPackagePart().getContentType();
+            MimeType mimeType = resolveMimeType(contentType, fileName);
+            String ocrText = tryCallEmbeddedImageOcr(imageBytes, fileName, mimeType, requestConfig, index + 1);
+            if (StringUtils.hasText(ocrText)) {
+                imageTexts.add("[内嵌图片 %d]\n%s".formatted(index + 1, ocrText));
+            }
+        }
+        return String.join("\n\n", imageTexts);
+    }
+
+    private String extractEmbeddedDocImageText(List<Picture> pictures, RagOcrRequestConfig requestConfig) {
+        if (pictures == null || pictures.isEmpty()) {
+            return "";
+        }
+        int maxImages = ragOcrProperties.getMaxEmbeddedImages() == null ? 0 : ragOcrProperties.getMaxEmbeddedImages();
+        if (maxImages <= 0) {
+            return "";
+        }
+
+        List<String> imageTexts = new ArrayList<>();
+        int count = Math.min(pictures.size(), maxImages);
+        for (int index = 0; index < count; index++) {
+            Picture picture = pictures.get(index);
+            byte[] imageBytes = picture.getContent();
+            if (imageBytes == null || imageBytes.length == 0) {
+                continue;
+            }
+
+            String fileName = picture.suggestFullFileName();
+            if (!StringUtils.hasText(fileName)) {
+                String ext = picture.suggestFileExtension();
+                fileName = "embedded-image-" + (index + 1) + (StringUtils.hasText(ext) ? "." + ext : "");
+            }
+            MimeType mimeType = resolveMimeType(picture.getMimeType(), fileName);
+            String ocrText = tryCallEmbeddedImageOcr(imageBytes, fileName, mimeType, requestConfig, index + 1);
+            if (StringUtils.hasText(ocrText)) {
+                imageTexts.add("[内嵌图片 %d]\n%s".formatted(index + 1, ocrText));
+            }
+        }
+        return String.join("\n\n", imageTexts);
+    }
+
+    private String tryCallEmbeddedImageOcr(byte[] bytes,
+                                           String fileName,
+                                           MimeType mimeType,
+                                           RagOcrRequestConfig requestConfig,
+                                           int imageIndex) {
+        try {
+            return callOcrModel(bytes, fileName, mimeType, requestConfig);
+        } catch (Exception ex) {
+            log.warn("Skip embedded image OCR: imageIndex={}, fileName={}", imageIndex, fileName, ex);
+            return "";
+        }
+    }
+
+    private String mergePreviewSections(String text, String ocrText) {
+        List<String> sections = new ArrayList<>();
+        if (StringUtils.hasText(text)) {
+            sections.add(text);
+        }
+        if (StringUtils.hasText(ocrText)) {
+            sections.add(StringUtils.hasText(text) ? "[图片 OCR 文本]\n" + ocrText : ocrText);
+        }
+        return String.join("\n\n", sections);
     }
 
     private String extractPdfText(MultipartFile file, RagOcrRequestConfig requestConfig) throws IOException {
@@ -164,6 +293,14 @@ public class RagParseServiceImpl implements RagParseService {
                 || "application/pdf".equalsIgnoreCase(contentType);
     }
 
+    private boolean isDocx(String fileName) {
+        return fileName != null && fileName.toLowerCase().endsWith(".docx");
+    }
+
+    private boolean isDoc(String fileName) {
+        return fileName != null && fileName.toLowerCase().endsWith(".doc");
+    }
+
     private boolean isImage(String contentType, String fileName) {
         if (StringUtils.hasText(contentType) && contentType.toLowerCase().startsWith("image/")) {
             return true;
@@ -209,5 +346,8 @@ public class RagParseServiceImpl implements RagParseService {
             return "";
         }
         return text.replace("\r\n", "\n").trim();
+    }
+
+    private record StructuredExtractionResult(String structuredText, String ocrText, boolean ocrUsed) {
     }
 }
