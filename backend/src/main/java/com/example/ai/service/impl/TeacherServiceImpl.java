@@ -45,8 +45,21 @@ public class TeacherServiceImpl implements TeacherService {
     }
 
     @Override
-    public Optional<Teacher> update(Integer id, Teacher teacher, String operator) {
+    public Optional<Teacher> update(Integer id, Teacher teacher, String operator, Integer actorUserId, String actorRole) {
         return Optional.ofNullable(teacherMapper.selectById(id)).map(existing -> {
+            // 教师登录后只能修改自己的电话号码，其他教师档案字段仍由管理员维护。
+            if (Role.TEACHER.name().equalsIgnoreCase(actorRole)) {
+                if (actorUserId == null || !actorUserId.equals(existing.getUserId())) {
+                    throw new IllegalArgumentException("Teachers can only update their own phone");
+                }
+                existing.setPhone(teacher.getPhone());
+                teacherMapper.update(existing);
+                Teacher saved = teacherMapper.selectById(existing.getId());
+                operationLogService.log(operator, "教师更新自己的电话号码 id=" + saved.getId());
+                return saved;
+            }
+
+            // 管理员保留教师档案的完整维护权限。
             if (teacher.getUserId() != null && !teacher.getUserId().equals(existing.getUserId())) {
                 validateUser(teacher.getUserId());
                 if (teacherMapper.countByUserId(teacher.getUserId()) > 0) {
@@ -55,6 +68,8 @@ public class TeacherServiceImpl implements TeacherService {
                 existing.setUserId(teacher.getUserId());
             }
             existing.setName(teacher.getName());
+            existing.setGender(teacher.getGender());
+            existing.setPhone(teacher.getPhone());
             existing.setDepartment(teacher.getDepartment());
             existing.setTitle(teacher.getTitle());
             existing.setResearchField(teacher.getResearchField());

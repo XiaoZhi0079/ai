@@ -16,6 +16,8 @@ CREATE TABLE teachers (
                           id INT PRIMARY KEY AUTO_INCREMENT COMMENT '鏁欏笀淇℃伅ID',
                           user_id INT NOT NULL UNIQUE COMMENT '鍏宠仈閫氱敤鐢ㄦ埛琛?ID',
                           name VARCHAR(50) NOT NULL COMMENT '姓名',
+                          gender VARCHAR(10) COMMENT '性别',
+                          phone VARCHAR(32) COMMENT '教师电话号码',
                           department VARCHAR(50) COMMENT '鎵€灞為櫌绯伙紙濡傝绠楁満瀛﹂櫌锛?,
                           title VARCHAR(50) COMMENT '鑱岀О锛堝鏁欐巿/鍓暀鎺?璁插笀锛?,
                           research_field TEXT COMMENT '鐮旂┒棰嗗煙锛堟敮鎸丒moji锛?,

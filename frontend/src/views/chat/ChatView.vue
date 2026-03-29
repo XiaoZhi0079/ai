@@ -27,6 +27,7 @@
           <el-radio-button value="DIRECT">{{ texts.direct }}</el-radio-button>
           <el-radio-button value="KNOWLEDGE_BASE">{{ texts.knowledgeBase }}</el-radio-button>
           <el-radio-button value="INTERNET_SEARCH">{{ texts.internetSearch }}</el-radio-button>
+          <el-radio-button value="DATA_QUERY">{{ texts.dataQuery }}</el-radio-button>
         </el-radio-group>
 
         <el-select
@@ -49,7 +50,7 @@
         </div>
       </div>
 
-      <div v-if="uploadedImages.length" class="image-preview">
+      <div v-if="chatMode !== 'DATA_QUERY' && uploadedImages.length" class="image-preview">
         <div v-for="(img, index) in uploadedImages" :key="index" class="preview-item">
           <el-image :src="img.previewUrl" fit="cover" style="width: 60px; height: 60px; border-radius: 6px" />
           <el-icon class="remove-img" @click="uploadedImages.splice(index, 1)"><Close /></el-icon>
@@ -57,11 +58,11 @@
       </div>
 
       <div class="chat-input">
-        <el-upload :show-file-list="false" :before-upload="handleImageUpload" accept="image/*" multiple>
+        <el-upload v-if="chatMode !== 'DATA_QUERY'" :show-file-list="false" :before-upload="handleImageUpload" accept="image/*" multiple>
           <el-button :icon="Picture" circle size="small" />
         </el-upload>
 
-        <el-button size="small" :loading="generatingImage" :disabled="!userInput.trim() || sending || generatingImage" @click="handleGenerateImage">
+        <el-button v-if="chatMode !== 'DATA_QUERY'" size="small" :loading="generatingImage" :disabled="!userInput.trim() || sending || generatingImage" @click="handleGenerateImage">
           {{ texts.generateImage }}
         </el-button>
 
@@ -69,7 +70,7 @@
           v-model="userInput"
           type="textarea"
           :autosize="{ minRows: 1, maxRows: 4 }"
-          :placeholder="texts.inputPlaceholder"
+          :placeholder="inputPlaceholder"
           @keydown.enter.exact.prevent="sendMessage"
         />
 
@@ -80,14 +81,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ChatLineSquare, Close, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ChatMessage from '@/components/ChatMessage.vue'
-import { generateImage, getChatHistory, getHistoryList, getModelOptions, sendChat } from '@/api/chat'
+import { generateImage, getChatHistory, getHistoryList, getModelOptions, queryData, sendChat } from '@/api/chat'
 import { uploadImages } from '@/api/upload'
 import { useUserStore } from '@/stores/user'
-import type { ChatMode, ConversationItem, ImagesResponse, MessageVO, ModelOption } from '@/types'
+import type { AiSqlQueryResult, ChatMode, ConversationItem, ImagesResponse, MessageVO, ModelOption } from '@/types'
 
 defineOptions({ name: 'ChatView' })
 
@@ -97,6 +98,7 @@ const texts = {
   direct: '\u76f4\u63a5\u5bf9\u8bdd',
   knowledgeBase: '\u77e5\u8bc6\u5e93',
   internetSearch: '\u8054\u7f51\u641c\u7d22',
+  dataQuery: '\u6570\u636e\u67e5\u8be2',
   selectModel: '\u9009\u62e9\u6a21\u578b',
   aiThinking: 'AI \u6b63\u5728\u601d\u8003...',
   imageGenerating: '\u6b63\u5728\u751f\u6210\u56fe\u7247...',
@@ -105,10 +107,12 @@ const texts = {
   selectModelFirst: '\u8bf7\u5148\u9009\u62e9\u6a21\u578b',
   uploadImageFailed: '\u56fe\u7247\u4e0a\u4f20\u5931\u8d25',
   chatFailed: '\u8bf7\u6c42\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
+  dataQueryFailed: '\u6570\u636e\u67e5\u8be2\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
   modelLoadFailed: '\u6a21\u578b\u5217\u8868\u52a0\u8f7d\u5931\u8d25',
   generatedImage: '\u5df2\u751f\u6210\u56fe\u7247',
   imageFailed: '\u56fe\u7247\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u3002',
-  imagePromptPrefix: '\u3010\u6587\u751f\u56fe\u3011'
+  imagePromptPrefix: '\u3010\u6587\u751f\u56fe\u3011',
+  dataQueryPlaceholder: '\u8f93\u5165\u4f60\u60f3\u67e5\u8be2\u7684\u6570\u636e\u95ee\u9898...'
 } as const
 
 // Reactive state for the chat page lives in one place for easier maintenance.
@@ -125,6 +129,8 @@ const modelsLoading = ref(false)
 const currentChatId = ref('')
 const historyItems = ref<ConversationItem[]>([])
 const uploadedImages = ref<ImagesResponse[]>([])
+
+const inputPlaceholder = computed(() => chatMode.value === 'DATA_QUERY' ? texts.dataQueryPlaceholder : texts.inputPlaceholder)
 
 // Generate a lightweight client-side conversation id before the backend stores history.
 function generateChatId() {
@@ -210,22 +216,40 @@ async function sendMessage() {
   scrollToBottom()
 
   try {
-    const reply = await sendChat({
-      userName: userStore.username,
-      chatId: currentChatId.value,
-      userInput: input,
-      chatMode: chatMode.value,
-      model: model.value,
-      imageFiles: uploadedImages.value.length ? uploadedImages.value : null
-    })
-    messages.value.push({ role: 'ASSISTANT', content: reply || '(empty)' })
-    uploadedImages.value = []
-    appendNewHistoryTitle(input)
+    if (chatMode.value === 'DATA_QUERY') {
+      const result = await queryData(input, model.value)
+      messages.value.push(buildDataQueryMessage(result))
+    } else {
+      const reply = await sendChat({
+        userName: userStore.username,
+        chatId: currentChatId.value,
+        userInput: input,
+        chatMode: chatMode.value,
+        model: model.value,
+        imageFiles: uploadedImages.value.length ? uploadedImages.value : null
+      })
+      messages.value.push({ role: 'ASSISTANT', content: reply || '(empty)' })
+      uploadedImages.value = []
+      appendNewHistoryTitle(input)
+    }
   } catch {
-    messages.value.push({ role: 'ASSISTANT', content: texts.chatFailed })
+    messages.value.push({
+      role: 'ASSISTANT',
+      content: chatMode.value === 'DATA_QUERY' ? texts.dataQueryFailed : texts.chatFailed
+    })
   } finally {
     sending.value = false
     scrollToBottom()
+  }
+}
+
+function buildDataQueryMessage(result: AiSqlQueryResult): MessageVO {
+  const summary = result.rowCount > 0 ? `已查询到 ${result.rowCount} 条结果。` : '查询已完成，没有匹配结果。'
+  return {
+    role: 'ASSISTANT',
+    kind: 'data-query',
+    content: summary,
+    dataQuery: result
   }
 }
 
@@ -276,6 +300,12 @@ onMounted(() => {
   newChat()
   loadHistoryList()
   loadModelOptions()
+})
+
+watch(chatMode, (mode) => {
+  if (mode === 'DATA_QUERY') {
+    uploadedImages.value = []
+  }
 })
 </script>
 

@@ -12,10 +12,10 @@ VALUES
   (6, 's_sun',  '${bcrypt}student3',          'STUDENT', 'sun.student@school.edu',   1, '2026-03-01 09:12:00', '2026-03-01 09:12:00');
 
 /* teachers (user_id references users.id logically) */
-INSERT INTO teachers (id, user_id, name, department, title, research_field, office_address, created_at, updated_at)
+INSERT INTO teachers (id, user_id, name, gender, phone, department, title, research_field, office_address, created_at, updated_at)
 VALUES
-  (1, 2, '张伟', '计算机学院', '副教授', 'AI, NLP', '计算机楼301', '2026-03-01 10:00:00', '2026-03-01 10:00:00'),
-  (2, 3, '李强', '软件学院',   '讲师',   '软件测试', '软件楼205',  '2026-03-01 10:05:00', '2026-03-01 10:05:00');
+  (1, 2, '张伟', '男', '13811110001', '计算机学院', '副教授', 'AI, NLP', '计算机楼301', '2026-03-01 10:00:00', '2026-03-01 10:00:00'),
+  (2, 3, '李强', '男', '13811110002', '软件学院',   '讲师',   '软件测试', '软件楼205',  '2026-03-01 10:05:00', '2026-03-01 10:05:00');
 
 /* students (user_id references users.id logically) */
 INSERT INTO students (id, user_id, name, grade, major, class_name, dormitory, guardian_phone, created_at, updated_at)

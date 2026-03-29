@@ -40,12 +40,12 @@ public class TeacherController {
                 .orElseGet(() -> LeeResult.fail("Teacher not found"));
     }
 
-    @RoleRequired({Role.ADMIN})
+    @RoleRequired({Role.ADMIN, Role.TEACHER})
     @PutMapping("/{id}")
     public LeeResult<Teacher> update(HttpServletRequest request,
                                      @PathVariable Integer id,
                                      @RequestBody Teacher teacher) {
-        return teacherService.update(id, teacher, OperatorResolver.resolve(request))
+        return teacherService.update(id, teacher, OperatorResolver.resolve(request), currentUserId(request), currentRole(request))
                 .map(LeeResult::ok)
                 .orElseGet(() -> LeeResult.fail("Teacher not found"));
     }
@@ -56,5 +56,15 @@ public class TeacherController {
                                   @PathVariable Integer id) {
         boolean deleted = teacherService.delete(id, OperatorResolver.resolve(request));
         return deleted ? LeeResult.ok() : LeeResult.fail("Teacher not found");
+    }
+
+    private Integer currentUserId(HttpServletRequest request) {
+        String authUserId = (String) request.getAttribute("authUserId");
+        return authUserId == null || authUserId.isBlank() ? null : Integer.parseInt(authUserId);
+    }
+
+    private String currentRole(HttpServletRequest request) {
+        Object authRole = request.getAttribute("authRole");
+        return authRole == null ? "" : String.valueOf(authRole).trim().toUpperCase();
     }
 }

@@ -1,5 +1,5 @@
 import request from './request'
-import type { ChatEntity, MessageVO, ModelOption, ImagesResponse, ConversationItem } from '@/types'
+import type { AiSqlQueryResult, ChatEntity, MessageVO, ModelOption, ImagesResponse, ConversationItem } from '@/types'
 
 export function sendChat(data: ChatEntity): Promise<string> {
   return request.post('/ai/chat', data)
@@ -19,4 +19,8 @@ export function generateImage(prompt: string, chatId?: string): Promise<ImagesRe
 
 export function getModelOptions(): Promise<ModelOption[]> {
   return request.get('/ai/models')
+}
+
+export function queryData(question: string, model?: string): Promise<AiSqlQueryResult> {
+  return request.post('/ai/data-query', { question, model })
 }

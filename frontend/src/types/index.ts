@@ -1,5 +1,5 @@
 export type Role = 'ADMIN' | 'TEACHER' | 'STUDENT'
-export type ChatMode = 'DIRECT' | 'KNOWLEDGE_BASE' | 'INTERNET_SEARCH'
+export type ChatMode = 'DIRECT' | 'KNOWLEDGE_BASE' | 'INTERNET_SEARCH' | 'DATA_QUERY'
 
 export interface LeeResult<T> {
   code: number
@@ -42,6 +42,14 @@ export interface MessageVO {
   role: 'USER' | 'ASSISTANT' | 'SYSTEM'
   content: string
   images?: string[]
+  kind?: 'chat' | 'data-query'
+  dataQuery?: AiSqlQueryResult
+}
+
+export interface AiSqlQueryResult {
+  sql: string
+  rowCount: number
+  rows: Array<Record<string, unknown>>
 }
 
 export interface ImagesResponse {
@@ -84,6 +92,7 @@ export interface Teacher {
   userId?: number
   name: string
   gender: string
+  phone: string
   department: string
   title: string
   researchField: string

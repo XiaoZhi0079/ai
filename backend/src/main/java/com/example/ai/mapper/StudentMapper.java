@@ -56,4 +56,14 @@ public interface StudentMapper {
 
     @Select("SELECT COUNT(1) FROM students WHERE user_id = #{userId}")
     int countByUserId(Integer userId);
+
+    @Select("""
+            SELECT id, user_id AS userId, name, gender, grade, major,
+                   class_name AS className, dormitory, guardian_phone AS guardianPhone,
+                   created_at AS createdAt, updated_at AS updatedAt
+            FROM students
+            WHERE user_id = #{userId}
+            LIMIT 1
+            """)
+    Student selectByUserId(Integer userId);
 }

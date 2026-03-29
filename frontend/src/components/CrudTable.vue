@@ -39,7 +39,7 @@
         />
       </el-select>
 
-      <el-button v-if="!readonly" type="primary" @click="openDialog()">
+      <el-button v-if="allowCreateResolved" type="primary" @click="openDialog()">
         <el-icon><Plus /></el-icon>
         新增
       </el-button>
@@ -58,10 +58,10 @@
         </template>
       </el-table-column>
 
-      <el-table-column v-if="!readonly" label="操作" width="180" fixed="right">
+      <el-table-column v-if="showActionsColumn" label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" text size="small" @click="openDialog(row)">编辑</el-button>
-          <el-popconfirm title="确定删除吗？" @confirm="handleDelete(row.id)">
+          <el-button v-if="canEditRow(row)" type="primary" text size="small" @click="openDialog(row)">编辑</el-button>
+          <el-popconfirm v-if="canDeleteRow(row)" title="确定删除吗？" @confirm="handleDelete(row.id)">
             <template #reference>
               <el-button type="danger" text size="small">删除</el-button>
             </template>
@@ -81,6 +81,7 @@
           <el-select
             v-if="column.type === 'select'"
             v-model="(formData as any)[column.prop]"
+            :disabled="isFieldDisabled(column)"
             style="width: 100%"
           >
             <el-option
@@ -96,6 +97,7 @@
             v-model="(formData as any)[column.prop]"
             type="date"
             value-format="YYYY-MM-DD"
+            :disabled="isFieldDisabled(column)"
             style="width: 100%"
           />
 
@@ -103,6 +105,7 @@
             v-else-if="column.type === 'number'"
             v-model="(formData as any)[column.prop]"
             :precision="column.precision"
+            :disabled="isFieldDisabled(column)"
             style="width: 100%"
           />
 
@@ -111,6 +114,7 @@
             v-model="(formData as any)[column.prop]"
             :type="column.type === 'textarea' ? 'textarea' : column.type === 'password' ? 'password' : 'text'"
             :show-password="column.type === 'password'"
+            :disabled="isFieldDisabled(column)"
           />
         </el-form-item>
       </el-form>
@@ -163,6 +167,12 @@ export interface CrudApi {
   remove: (id: number) => Promise<void>
 }
 
+export interface FormFieldContext {
+  isEdit: boolean
+  row: any | null
+  formData: Record<string, any>
+}
+
 const props = defineProps<{
   columns: Column[]
   api: CrudApi
@@ -172,6 +182,11 @@ const props = defineProps<{
   filterConfigs?: FilterConfig[]
   categoryConfig?: CategoryConfig
   readonly?: boolean
+  allowCreate?: boolean
+  allowEdit?: boolean | ((row: any) => boolean)
+  allowDelete?: boolean | ((row: any) => boolean)
+  // 允许业务页按字段控制表单可编辑性，例如教师只能改自己的电话号码。
+  fieldDisabled?: (column: Column, context: FormFieldContext) => boolean
 }>()
 
 const tableData = ref<any[]>([])
@@ -180,6 +195,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref<number | null>(null)
 const formData = ref<Record<string, any>>({})
+const currentRow = ref<any | null>(null)
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const searchKey = ref('')
@@ -189,6 +205,10 @@ const categoryValue = ref(props.categoryConfig?.defaultValue ?? '')
 const tableColumns = computed(() => props.columns.filter((column) => !column.formOnly))
 const formColumns = computed(() => props.columns.filter((column) => !column.tableOnly))
 const resolvedRules = computed(() => props.rules || {})
+const allowCreateResolved = computed(() => !props.readonly && (props.allowCreate ?? true))
+const allowEditResolved = computed(() => !props.readonly && props.allowEdit !== false)
+const allowDeleteResolved = computed(() => !props.readonly && props.allowDelete !== false)
+const showActionsColumn = computed(() => allowEditResolved.value || allowDeleteResolved.value)
 
 const filteredData = computed(() => {
   let data = tableData.value
@@ -232,10 +252,12 @@ function openDialog(row?: any) {
   if (row) {
     isEdit.value = true
     editId.value = row.id
+    currentRow.value = row
     formData.value = buildFormModel(row)
   } else {
     isEdit.value = false
     editId.value = null
+    currentRow.value = null
     formData.value = props.defaultForm()
   }
   dialogVisible.value = true
@@ -264,6 +286,30 @@ async function handleDelete(id: number) {
   await props.api.remove(id)
   ElMessage.success('删除成功')
   fetchData()
+}
+
+function canEditRow(row: any) {
+  if (!allowEditResolved.value) return false
+  if (typeof props.allowEdit === 'function') {
+    return props.allowEdit(row)
+  }
+  return props.allowEdit ?? true
+}
+
+function canDeleteRow(row: any) {
+  if (!allowDeleteResolved.value) return false
+  if (typeof props.allowDelete === 'function') {
+    return props.allowDelete(row)
+  }
+  return props.allowDelete ?? true
+}
+
+function isFieldDisabled(column: Column) {
+  return props.fieldDisabled?.(column, {
+    isEdit: isEdit.value,
+    row: currentRow.value,
+    formData: formData.value
+  }) ?? false
 }
 
 function buildFormModel(row: any) {
