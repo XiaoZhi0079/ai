@@ -47,24 +47,26 @@
       <div class="panel-title">入库操作</div>
       <div class="process-meta">
         <el-tag v-if="selectedFileName">{{ selectedFileName }}</el-tag>
-        <el-tag v-if="selectedFileName" :type="isOcrRequired ? 'danger' : 'success'">
-          {{ isOcrRequired ? '必须：先 OCR 预览' : '建议：直接入库' }}
+        <el-tag v-if="selectedFileName" :type="isOcrRequired ? 'danger' : 'primary'">
+          {{ isOcrRequired ? 'OCR 预览' : '解析预览' }}
         </el-tag>
       </div>
       <p class="process-hint">{{ processHint }}</p>
       <div class="primary-action-row">
         <el-button
           type="primary"
-          :loading="isOcrRequired ? parsing : uploadingDirect"
+          :loading="parsing"
           :disabled="!selectedFile"
           @click="handlePrimaryAction"
         >
-          {{ isOcrRequired ? '先 OCR 预览' : '上传并入库' }}
+          {{ isOcrRequired ? 'OCR 解析' : '解析' }}
         </el-button>
-      </div>
-      <div v-if="!isOcrRequired" class="secondary-action-row">
-        <el-button link type="primary" :loading="parsing" :disabled="!selectedFile" @click="handleParse">
-          需要先识别文本？试试 OCR 预览
+        <el-button
+          :loading="quickUploading"
+          :disabled="!selectedFile"
+          @click="handleQuickUpload"
+        >
+          上传
         </el-button>
       </div>
     </div>
@@ -155,12 +157,12 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="previewDialogVisible" title="文本预览与编辑" width="900px">
+    <el-dialog v-model="previewDialogVisible" :title="previewDialogTitle" width="900px">
       <div v-if="previewMeta" class="preview-meta">
         <el-tag>{{ previewMeta.fileName }}</el-tag>
         <el-tag type="info">字数：{{ previewMeta.charCount }}</el-tag>
         <el-tag :type="previewMeta.ocrUsed ? 'warning' : 'success'">
-          {{ previewMeta.ocrUsed ? 'OCR' : '直接解析' }}
+          {{ previewMeta.ocrUsed ? 'OCR 解析' : '文档解析' }}
         </el-tag>
         <el-tag :type="previewMeta.knowledgeScope === 'PUBLIC' ? 'success' : 'info'">
           {{ previewMeta.knowledgeScope === 'PUBLIC' ? '公共' : '私有' }}
@@ -238,7 +240,6 @@ import {
   reOcrRagDocumentPreview,
   renameRagDocument,
   saveRagOcrSettings,
-  uploadRagDocument,
   type RagDocumentDetail,
   type RagDocumentInfo,
   type RagOcrConfig,
@@ -255,7 +256,7 @@ const selectedFile = ref<File | null>(null)
 const selectedScope = ref<ScopeValue>('PRIVATE')
 const parsing = ref(false)
 const confirming = ref(false)
-const uploadingDirect = ref(false)
+const quickUploading = ref(false)
 
 const documents = ref<RagDocumentInfo[]>([])
 const loadingDocs = ref(false)
@@ -296,23 +297,25 @@ const selectedFileExt = computed(() => {
 
 const isOcrRequired = computed(() => ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(selectedFileExt.value))
 
+const previewDialogTitle = computed(() => (isOcrRequired.value ? 'OCR 预览与编辑' : '解析预览与编辑'))
+
 const processHint = computed(() => {
   if (!selectedFile.value) {
-    return '请先选择文件。普通文档可直接上传并入库；PDF 和图片文件必须先做 OCR 预览。docx 会自动识别内嵌图片文字，Markdown 仅解析文本内容。'
+    return '请先选择文件。所有文档都会先解析并进入预览，你可以修改文本后再决定是否入库。PDF 和图片会走 OCR；docx/doc 会解析正文并尝试识别内嵌图片。'
   }
   if (isOcrRequired.value) {
-    return '当前文件属于 PDF 或图片类型，必须先进行 OCR 预览，确认识别结果后才能入库。'
+    return '当前文件属于 PDF 或图片类型，将先进行 OCR 解析预览。确认识别结果并可手动修改后，再入库。'
   }
   if (selectedFileExt.value === 'docx') {
-    return '当前是 docx 文档：正文会直接提取；若存在内嵌图片，会尝试 OCR 后一并入库，图片 OCR 失败不会影响正文入库。'
+    return '当前是 docx 文档：正文会先提取到预览框；若存在内嵌图片，会尝试 OCR 后一并展示，你可以修改后再入库。'
   }
   if (selectedFileExt.value === 'doc') {
-    return '当前是 doc 文档：正文会直接提取；若存在内嵌图片，会尝试 OCR 后一并入库，图片 OCR 失败不会影响正文入库。'
+    return '当前是 doc 文档：正文会先提取到预览框；若存在内嵌图片，会尝试 OCR 后一并展示，你可以修改后再入库。'
   }
   if (selectedFileExt.value === 'md') {
-    return '当前是 Markdown 文档：目前只解析 .md 文件中的文本内容，不会跟随图片链接自动 OCR。'
+    return '当前是 Markdown 文档：会先解析 .md 文件中的文本内容进入预览；不会跟随图片链接自动 OCR。'
   }
-  return '当前文件可直接上传并入库；如果想先检查抽取文本，也可以使用 OCR 预览。'
+  return '当前文件会先解析并进入预览。确认文本内容无误后，再决定是否上传入库。'
 })
 
 const filteredDocuments = computed(() => {
@@ -347,10 +350,11 @@ function handleChange(file: UploadFile) {
 }
 
 function handlePrimaryAction() {
-  if (isOcrRequired.value) {
-    return handleParse()
-  }
-  return handleDirectUpload()
+  return handleParse()
+}
+
+function hasReusablePreview() {
+  return !!previewMeta.value && previewMeta.value.fileName === selectedFileName.value
 }
 
 function resetUploadState() {
@@ -451,37 +455,46 @@ async function handleParse() {
   }
 }
 
-async function handleDirectUpload() {
-  if (!selectedFile.value) return
-  if (isOcrRequired.value) {
-    ElMessage.warning('PDF 和图片文件必须先进行 OCR 预览')
-    return
-  }
-  uploadingDirect.value = true
-  try {
-    await uploadRagDocument(selectedFile.value, currentScope())
-    ElMessage.success('文档已直接上传到知识库')
-    resetUploadState()
-    await fetchDocuments()
-  } finally {
-    uploadingDirect.value = false
-  }
-}
-
 async function handleConfirmUpload() {
   if (!selectedFile.value) return
   confirming.value = true
   try {
-    await confirmRagDocument(
-      selectedFile.value,
-      buildPreviewCombinedText(previewStructuredText.value, previewOcrText.value),
-      currentScope()
-    )
+    await confirmRagDocument(selectedFile.value, buildCurrentUploadText(), currentScope())
     ElMessage.success('文档入库成功')
     resetUploadState()
     await fetchDocuments()
   } finally {
     confirming.value = false
+  }
+}
+
+function buildCurrentUploadText() {
+  return buildPreviewCombinedText(previewStructuredText.value, previewOcrText.value)
+}
+
+async function handleQuickUpload() {
+  if (!selectedFile.value) return
+  quickUploading.value = true
+  try {
+    if (!hasReusablePreview()) {
+      const preview = await parseRagDocument(selectedFile.value, currentScope(), buildCustomOcrConfig())
+      previewMeta.value = preview
+      previewStructuredText.value = preview.structuredText || ''
+      previewOcrText.value = preview.ocrText || ''
+    }
+
+    const uploadText = buildCurrentUploadText()
+    if (!uploadText.trim()) {
+      ElMessage.warning('未提取到可上传的文本，请先检查解析结果')
+      return
+    }
+
+    await confirmRagDocument(selectedFile.value, uploadText, currentScope())
+    ElMessage.success('文档入库成功')
+    resetUploadState()
+    await fetchDocuments()
+  } finally {
+    quickUploading.value = false
   }
 }
 

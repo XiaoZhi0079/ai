@@ -4,6 +4,7 @@ import com.example.ai.config.RagOcrProperties;
 import com.example.ai.pojo.RagOcrRequestConfig;
 import com.example.ai.pojo.RagParsePreview;
 import com.example.ai.service.RagParseService;
+import com.example.ai.service.RagPythonOcrService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.hwpf.HWPFDocument;
@@ -50,6 +51,7 @@ import java.util.stream.IntStream;
 public class RagParseServiceImpl implements RagParseService {
 
     private final RagOcrProperties ragOcrProperties;
+    private final RagPythonOcrService ragPythonOcrService;
 
     @Override
     public RagParsePreview parse(MultipartFile file, String knowledgeScope, RagOcrRequestConfig requestConfig) throws IOException {
@@ -186,7 +188,7 @@ public class RagParseServiceImpl implements RagParseService {
                                            RagOcrRequestConfig requestConfig,
                                            int imageIndex) {
         try {
-            return callOcrModel(bytes, fileName, mimeType, requestConfig);
+            return callConfiguredOcr(bytes, fileName, mimeType, requestConfig);
         } catch (Exception ex) {
             log.warn("Skip embedded image OCR: imageIndex={}, fileName={}", imageIndex, fileName, ex);
             return "";
@@ -205,6 +207,15 @@ public class RagParseServiceImpl implements RagParseService {
     }
 
     private String extractPdfText(MultipartFile file, RagOcrRequestConfig requestConfig) throws IOException {
+        if (!shouldUseLegacyOcr(requestConfig)) {
+            return callConfiguredOcr(
+                    file.getBytes(),
+                    file.getOriginalFilename(),
+                    MimeTypeUtils.parseMimeType("application/pdf"),
+                    requestConfig
+            );
+        }
+
         byte[] bytes = file.getBytes();
         try (PDDocument pdf = Loader.loadPDF(bytes)) {
             PDFRenderer renderer = new PDFRenderer(pdf);
@@ -219,7 +230,7 @@ public class RagParseServiceImpl implements RagParseService {
         try {
             BufferedImage image = renderer.renderImageWithDPI(pageIndex, ragOcrProperties.getPdfDpi(), ImageType.RGB);
             byte[] pngBytes = toPngBytes(image);
-            String pageText = callOcrModel(pngBytes, "page-" + (pageIndex + 1) + ".png", MimeTypeUtils.IMAGE_PNG, requestConfig);
+            String pageText = callConfiguredOcr(pngBytes, "page-" + (pageIndex + 1) + ".png", MimeTypeUtils.IMAGE_PNG, requestConfig);
             return "[Page %d]\n%s".formatted(pageIndex + 1, normalizeText(pageText));
         } catch (IOException ex) {
             throw new IllegalStateException("PDF OCR failed on page " + (pageIndex + 1), ex);
@@ -228,10 +239,17 @@ public class RagParseServiceImpl implements RagParseService {
 
     private String extractImageText(MultipartFile file, RagOcrRequestConfig requestConfig) throws IOException {
         MimeType mimeType = resolveMimeType(file.getContentType(), file.getOriginalFilename());
-        return callOcrModel(file.getBytes(), file.getOriginalFilename(), mimeType, requestConfig);
+        return callConfiguredOcr(file.getBytes(), file.getOriginalFilename(), mimeType, requestConfig);
     }
 
-    private String callOcrModel(byte[] bytes, String fileName, MimeType mimeType, RagOcrRequestConfig requestConfig) {
+    private String callConfiguredOcr(byte[] bytes, String fileName, MimeType mimeType, RagOcrRequestConfig requestConfig) {
+        if (shouldUseLegacyOcr(requestConfig)) {
+            return callLegacyOcrModel(bytes, fileName, mimeType, requestConfig);
+        }
+        return ragPythonOcrService.extractText(bytes, fileName, mimeType == null ? null : mimeType.toString());
+    }
+
+    protected String callLegacyOcrModel(byte[] bytes, String fileName, MimeType mimeType, RagOcrRequestConfig requestConfig) {
         RagOcrRequestConfig effectiveConfig = mergeConfig(requestConfig);
 
         OpenAiApi openAiApi = OpenAiApi.builder()
@@ -265,6 +283,12 @@ public class RagParseServiceImpl implements RagParseService {
                 .call()
                 .content();
         return normalizeText(content);
+    }
+
+    private boolean shouldUseLegacyOcr(RagOcrRequestConfig requestConfig) {
+        return StringUtils.hasText(requestConfig == null ? null : requestConfig.getBaseUrl())
+                || StringUtils.hasText(requestConfig == null ? null : requestConfig.getApiKey())
+                || StringUtils.hasText(requestConfig == null ? null : requestConfig.getModel());
     }
 
     private RagOcrRequestConfig mergeConfig(RagOcrRequestConfig requestConfig) {
