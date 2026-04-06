@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -60,35 +61,54 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public String chat(ChatEntity chatEntity, Long userId) {
-        // Read the request payload first so the later steps stay simple.
+        PreparedChat preparedChat = prepareChat(chatEntity, userId);
+
+        // Send the final prompt to the selected model.
+        String reply = preparedChat.chatClient().prompt(preparedChat.prompt())
+                /*.tools(new DateTimeTools())*/ // Prefer dependency injection if tools become stateful.
+                .call()
+                .content();
+        saveToMemory(preparedChat.chatId(), preparedChat.userInput(), reply, preparedChat.images());
+        return reply;
+    }
+
+    @Override
+    public Flux<String> streamChat(ChatEntity chatEntity, Long userId) {
+        PreparedChat preparedChat = prepareChat(chatEntity, userId);
+        StringBuilder replyBuilder = new StringBuilder();
+
+        return preparedChat.chatClient().prompt(preparedChat.prompt())
+                .stream()
+                .content()
+                .doOnNext(replyBuilder::append)
+                .doOnComplete(() -> saveToMemory(
+                        preparedChat.chatId(),
+                        preparedChat.userInput(),
+                        replyBuilder.toString(),
+                        preparedChat.images()))
+                .doOnError(ex -> log.error("Chat stream failed: chatId={}, model={}, mode={}",
+                        preparedChat.chatId(),
+                        chatEntity.getModel(),
+                        chatEntity.getChatMode(),
+                        ex));
+    }
+
+    private PreparedChat prepareChat(ChatEntity chatEntity, Long userId) {
         String chatId = chatEntity.getChatId();
-        String modelName = chatEntity.getModel();
         String userInput = chatEntity.getUserInput();
 
-        // Use the beginning of the first user message as the conversation title.
         String title = null;
         if (userInput != null && !userInput.isBlank()) {
             title = userInput.length() > 50 ? userInput.substring(0, 50) : userInput;
         }
-
-        // Save metadata for sidebar history.
         chatHistoryRepository.save(chatId, chatEntity.getChatMode().name(), userId, title);
 
-        ChatClient chatClient = clientFactory.getClient(modelName);
-
-        // Build the current-round messages and merge them with memory.
         List<ImagesResponse> images = chatEntity.getImageFiles();
         List<Message> baseMessages = buildMessagesByMode(chatEntity, images, userId);
         List<Message> mergedMessages = appendHistory(chatId, baseMessages);
         Prompt promptWithHistory = new Prompt(mergedMessages);
-
-        // Send the final prompt to the selected model.
-        String reply = chatClient.prompt(promptWithHistory)
-                /*.tools(new DateTimeTools())*/ // Prefer dependency injection if tools become stateful.
-                .call()
-                .content();
-        saveToMemory(chatId, userInput, reply, images);
-        return reply;
+        ChatClient chatClient = clientFactory.getClient(chatEntity.getModel());
+        return new PreparedChat(chatId, userInput, images, chatClient, promptWithHistory);
     }
 
     private List<Message> appendHistory(String chatId, List<Message> baseMessages) {
@@ -270,5 +290,13 @@ public class ChatServiceImpl implements ChatService {
             return document.getText();
         }
         return "[来源文件] " + fileName + "\n" + document.getText();
+    }
+
+    private record PreparedChat(
+            String chatId,
+            String userInput,
+            List<ImagesResponse> images,
+            ChatClient chatClient,
+            Prompt prompt) {
     }
 }

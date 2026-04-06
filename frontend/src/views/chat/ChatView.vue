@@ -85,7 +85,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ChatLineSquare, Close, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ChatMessage from '@/components/ChatMessage.vue'
-import { generateImage, getChatHistory, getHistoryList, getModelOptions, queryData, sendChat } from '@/api/chat'
+import { generateImage, getChatHistory, getHistoryList, getModelOptions, queryData, streamChat } from '@/api/chat'
 import { uploadImages } from '@/api/upload'
 import { useUserStore } from '@/stores/user'
 import type { AiSqlQueryResult, ChatMode, ConversationItem, ImagesResponse, MessageVO, ModelOption } from '@/types'
@@ -220,19 +220,51 @@ async function sendMessage() {
       const result = await queryData(input, model.value)
       messages.value.push(buildDataQueryMessage(result))
     } else {
-      const reply = await sendChat({
+      messages.value.push({ role: 'ASSISTANT', content: '' })
+      const assistantIndex = messages.value.length - 1
+
+      await streamChat({
         userName: userStore.username,
         chatId: currentChatId.value,
         userInput: input,
         chatMode: chatMode.value,
         model: model.value,
         imageFiles: uploadedImages.value.length ? uploadedImages.value : null
+      }, {
+        onStart: () => {
+          scrollToBottom()
+        },
+        onChunk: (chunk) => {
+          const assistantMessage = messages.value[assistantIndex]
+          if (assistantMessage) {
+            assistantMessage.content += chunk
+          }
+          scrollToBottom()
+        },
+        onDone: () => {
+          const assistantMessage = messages.value[assistantIndex]
+          if (assistantMessage && !assistantMessage.content) {
+            assistantMessage.content = '(empty)'
+          }
+        },
+        onError: (message) => {
+          const assistantMessage = messages.value[assistantIndex]
+          if (assistantMessage && message) {
+            assistantMessage.content = message
+          }
+        }
       })
-      messages.value.push({ role: 'ASSISTANT', content: reply || '(empty)' })
+
       uploadedImages.value = []
       appendNewHistoryTitle(input)
     }
   } catch {
+    const lastMessage = messages.value[messages.value.length - 1]
+    if (lastMessage?.role === 'ASSISTANT' && !lastMessage.content) {
+      messages.value.pop()
+    } else if (lastMessage?.role === 'ASSISTANT' && lastMessage.content) {
+      return
+    }
     messages.value.push({
       role: 'ASSISTANT',
       content: chatMode.value === 'DATA_QUERY' ? texts.dataQueryFailed : texts.chatFailed
