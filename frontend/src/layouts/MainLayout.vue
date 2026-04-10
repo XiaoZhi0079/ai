@@ -103,10 +103,16 @@ const currentPageTitle = computed(() => {
 
 <style scoped>
 .layout-container {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(72, 149, 255, 0.08), transparent 20%),
     linear-gradient(180deg, #f4f8fc 0%, #eef3f8 100%);
+}
+
+.layout-container > .el-container {
+  min-width: 0;
+  min-height: 0;
 }
 
 .layout-aside {
@@ -268,13 +274,18 @@ const currentPageTitle = computed(() => {
 }
 
 .layout-main {
+  display: flex;
+  min-height: 0;
   padding: 16px;
   background: transparent;
+  overflow: hidden;
 }
 
 .layout-main__inner {
-  min-height: calc(100vh - 124px);
+  flex: 1;
+  min-height: 0;
   padding: 8px;
+  overflow: hidden;
 }
 
 :deep(.el-menu) {

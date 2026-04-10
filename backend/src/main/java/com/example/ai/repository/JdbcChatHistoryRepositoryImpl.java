@@ -81,6 +81,28 @@ public class JdbcChatHistoryRepositoryImpl implements ChatHistoryRepository {
     }
 
     @Override
+    @Transactional
+    public boolean deleteByChatId(Long userId, String chatId) {
+        if (userId == null || chatId == null || chatId.isBlank()) {
+            return false;
+        }
+
+        Long conversationPk = jdbcTemplate.query(
+                "SELECT id FROM conversations WHERE conversation_uid = ? AND user_id = ?",
+                rs -> rs.next() ? rs.getLong("id") : null,
+                chatId,
+                userId
+        );
+        if (conversationPk == null) {
+            return false;
+        }
+
+        jdbcTemplate.update("DELETE FROM messages WHERE conversation_id = ?", conversationPk);
+        jdbcTemplate.update("DELETE FROM conversations WHERE id = ?", conversationPk);
+        return true;
+    }
+
+    @Override
     public List<Message> getbyid(String chatId) {
         return chatMemory.get(chatId);
     }

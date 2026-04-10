@@ -67,6 +67,7 @@ export interface ModelOption {
 export interface ConversationItem {
   chatId: string
   title: string | null
+  localOnly?: boolean
 }
 
 export interface UserView {

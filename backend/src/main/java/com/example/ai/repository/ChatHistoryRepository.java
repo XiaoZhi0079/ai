@@ -19,5 +19,8 @@ public interface ChatHistoryRepository {
     // 根据类型删除所有会话id
     void deleteAll(String type);
 
+    // 按用户删除指定会话
+    boolean deleteByChatId(Long userId, String chatId);
+
     List<Message> getbyid(String chatId);
 }

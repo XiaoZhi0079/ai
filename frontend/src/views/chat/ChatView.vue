@@ -14,21 +14,29 @@
       </div>
 
       <div class="history-list">
-        <button
+        <div
           v-for="item in historyItems"
           :key="item.chatId"
           :class="['history-item', { active: item.chatId === currentChatId }]"
-          type="button"
+          role="button"
+          tabindex="0"
           @click="loadChat(item.chatId)"
+          @keydown.enter.prevent="loadChat(item.chatId)"
+          @keydown.space.prevent="loadChat(item.chatId)"
         >
           <div class="history-item__icon">
             <el-icon><ChatLineSquare /></el-icon>
           </div>
           <div class="history-item__body">
-            <span class="history-id">{{ item.title || texts.newChatPlaceholder }}</span>
+            <div class="history-title-row">
+              <span class="history-id">{{ item.title || texts.newChatPlaceholder }}</span>
+            </div>
             <span class="history-meta">{{ item.chatId === currentChatId ? texts.currentConversation : texts.clickToOpen }}</span>
           </div>
-        </button>
+          <button class="history-delete-btn" type="button" @click.stop="handleDeleteChat(item.chatId)">
+            <el-icon><Delete /></el-icon>
+          </button>
+        </div>
 
         <el-empty v-if="historyItems.length === 0" :description="texts.noHistory" :image-size="60" class="history-empty" />
       </div>
@@ -114,10 +122,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ChatLineSquare, Close, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ChatLineSquare, Close, Delete, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import ChatMessage from '@/components/ChatMessage.vue'
-import { generateImage, getChatHistory, getHistoryList, getModelOptions, queryData, streamChat } from '@/api/chat'
+import { deleteChatHistory, generateImage, getChatHistory, getHistoryList, getModelOptions, queryData, streamChat } from '@/api/chat'
 import { uploadImages } from '@/api/upload'
 import { useUserStore } from '@/stores/user'
 import type { AiSqlQueryResult, ChatMode, ConversationItem, ImagesResponse, MessageVO, ModelOption } from '@/types'
@@ -148,7 +156,13 @@ const texts = {
   dataQueryPlaceholder: '输入你想查询的数据问题...',
   currentConversation: '当前会话',
   clickToOpen: '点击查看',
-  newChatPlaceholder: '新对话'
+  newChatPlaceholder: '新对话',
+  deleteSuccess: '历史会话已删除',
+  deleteFailed: '删除历史会话失败',
+  deleteConfirmTitle: '删除会话',
+  deleteConfirmText: '确定删除这条历史会话吗？此操作不可恢复。',
+  deleteConfirmButton: '删除',
+  deleteCancelButton: '取消'
 } as const
 
 const userStore = useUserStore()
@@ -181,9 +195,9 @@ function generateChatId() {
   return 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8)
 }
 
-function upsertHistoryItem(chatId: string, title?: string | null) {
+function upsertHistoryItem(chatId: string, title?: string | null, localOnly = false) {
   const existingIndex = historyItems.value.findIndex((item) => item.chatId === chatId)
-  const nextItem = { chatId, title: title || null }
+  const nextItem = { chatId, title: title || null, localOnly }
 
   if (existingIndex === 0) {
     historyItems.value[0] = nextItem
@@ -204,14 +218,14 @@ function newChat(addPlaceholder = false) {
   userInput.value = ''
 
   if (addPlaceholder) {
-    upsertHistoryItem(currentChatId.value, texts.newChatPlaceholder)
+    upsertHistoryItem(currentChatId.value, texts.newChatPlaceholder, true)
   }
 }
 
 async function loadHistoryList() {
   try {
-    const remoteItems = (await getHistoryList()) || []
-    const placeholderItems = historyItems.value.filter((item) => item.title === texts.newChatPlaceholder && !remoteItems.some((remote) => remote.chatId === item.chatId))
+    const remoteItems = ((await getHistoryList()) || []).map((item) => ({ ...item, localOnly: false }))
+    const placeholderItems = historyItems.value.filter((item) => item.localOnly && !remoteItems.some((remote) => remote.chatId === item.chatId))
     historyItems.value = [...placeholderItems, ...remoteItems]
   } catch {
   }
@@ -223,6 +237,59 @@ async function loadChat(chatId: string) {
     messages.value = (await getChatHistory(chatId)) || []
     scrollToBottom()
   } catch {
+  }
+}
+
+function clearCurrentWorkspace() {
+  currentChatId.value = ''
+  messages.value = []
+  uploadedImages.value = []
+  userInput.value = ''
+}
+
+async function handleDeleteChat(chatId: string) {
+  const targetItem = historyItems.value.find((item) => item.chatId === chatId)
+
+  try {
+    await ElMessageBox.confirm(
+      texts.deleteConfirmText,
+      texts.deleteConfirmTitle,
+      {
+        type: 'warning',
+        confirmButtonText: texts.deleteConfirmButton,
+        cancelButtonText: texts.deleteCancelButton
+      }
+    )
+  } catch {
+    return
+  }
+
+  try {
+    if (!targetItem?.localOnly) {
+      await deleteChatHistory(chatId)
+    }
+
+    historyItems.value = historyItems.value.filter((item) => item.chatId !== chatId)
+    const nextItem = historyItems.value[0]
+
+    if (currentChatId.value === chatId) {
+      if (nextItem) {
+        if (nextItem.localOnly) {
+          currentChatId.value = nextItem.chatId
+          messages.value = []
+          uploadedImages.value = []
+          userInput.value = ''
+        } else {
+          await loadChat(nextItem.chatId)
+        }
+      } else {
+        clearCurrentWorkspace()
+      }
+    }
+
+    ElMessage.success(texts.deleteSuccess)
+  } catch {
+    ElMessage.error(texts.deleteFailed)
   }
 }
 
@@ -249,12 +316,12 @@ function scrollToBottom() {
 function ensureCurrentChat() {
   if (!currentChatId.value) {
     currentChatId.value = generateChatId()
-    upsertHistoryItem(currentChatId.value, texts.newChatPlaceholder)
+    upsertHistoryItem(currentChatId.value, texts.newChatPlaceholder, true)
   }
 }
 
 function appendNewHistoryTitle(title: string) {
-  upsertHistoryItem(currentChatId.value, title.substring(0, 50) || texts.newChatPlaceholder)
+  upsertHistoryItem(currentChatId.value, title.substring(0, 50) || texts.newChatPlaceholder, false)
 }
 
 async function sendMessage() {
@@ -403,11 +470,13 @@ watch(chatMode, (mode) => {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 18px;
-  min-height: calc(100vh - 140px);
+  height: 100%;
+  min-height: 0;
 }
 
 .chat-sidebar,
 .chat-main {
+  min-height: 0;
   border: 1px solid rgba(193, 210, 227, 0.8);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.84);
@@ -455,7 +524,9 @@ watch(chatMode, (mode) => {
 
 .history-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px;
 }
 
@@ -464,6 +535,7 @@ watch(chatMode, (mode) => {
   gap: 12px;
   align-items: center;
   width: 100%;
+  box-sizing: border-box;
   margin-bottom: 8px;
   padding: 14px;
   border: 1px solid transparent;
@@ -500,22 +572,86 @@ watch(chatMode, (mode) => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 3px;
   text-align: left;
 }
 
-.history-id {
+.history-title-row {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
   overflow: hidden;
+}
+
+.history-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #8ba0b5;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.history-item:hover .history-delete-btn,
+.history-item:focus-within .history-delete-btn {
+  opacity: 1;
+}
+
+.history-delete-btn:hover {
+  background: rgba(239, 107, 107, 0.12);
+  color: #d65353;
+}
+
+.history-id {
+  display: block;
+  flex: 1;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   color: #18304b;
   font-size: 14px;
   font-weight: 600;
-  text-overflow: ellipsis;
+  line-height: 1.5;
+  padding-bottom: 6px;
+  margin-bottom: -6px;
   white-space: nowrap;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.history-id:hover {
+  scrollbar-color: rgba(137, 156, 176, 0.7) transparent;
+}
+
+.history-id::-webkit-scrollbar {
+  height: 6px;
+}
+
+.history-id::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.history-id::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.history-id:hover::-webkit-scrollbar-thumb {
+  background: rgba(137, 156, 176, 0.7);
 }
 
 .history-meta {
   color: #7b8ea2;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .history-empty {
@@ -563,6 +699,7 @@ watch(chatMode, (mode) => {
 
 .messages-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 24px;
   background: linear-gradient(180deg, rgba(248, 251, 255, 0.65), rgba(243, 248, 253, 0.38));
@@ -697,6 +834,8 @@ watch(chatMode, (mode) => {
 @media (max-width: 1100px) {
   .chat-container {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100%;
   }
 
   .chat-topbar {
@@ -706,6 +845,10 @@ watch(chatMode, (mode) => {
   .chat-topbar__right {
     width: 100%;
     min-width: 0;
+  }
+
+  .chat-sidebar {
+    max-height: 320px;
   }
 }
 

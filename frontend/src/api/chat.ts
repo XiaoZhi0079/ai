@@ -107,6 +107,10 @@ export function getChatHistory(chatId: string): Promise<MessageVO[]> {
   return request.get(`/ai/history/chat/${chatId}`)
 }
 
+export function deleteChatHistory(chatId: string): Promise<void> {
+  return request.delete(`/ai/history/chat/${chatId}`)
+}
+
 export function generateImage(prompt: string, chatId?: string): Promise<ImagesResponse> {
   return request.get('/image/chat', { params: { prompt, chatId } })
 }
