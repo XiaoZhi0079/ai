@@ -8,6 +8,9 @@ target/
 *.log
 *.err
 
+
+毕设文档/
+参考文档/
 # ===== Spring Boot =====
 **/application-local.yml
 **/application-dev.yml
@@ -48,3 +51,4 @@ Desktop.ini
 *.swp
 *.swo
 *~
+python-ocr/output/
