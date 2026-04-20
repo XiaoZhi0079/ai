@@ -87,12 +87,12 @@
         </div>
       </div>
 
-      <div v-if="chatMode !== 'DATA_QUERY' && uploadedImages.length" class="image-preview">
-        <div v-for="(img, index) in uploadedImages" :key="index" class="preview-item">
-          <el-image :src="img.previewUrl" fit="cover" style="width: 60px; height: 60px; border-radius: 10px" />
-          <el-icon class="remove-img" @click="uploadedImages.splice(index, 1)"><Close /></el-icon>
+        <div v-if="chatMode !== 'DATA_QUERY' && uploadedImages.length" class="image-preview">
+          <div v-for="(img, index) in uploadedImages" :key="index" class="preview-item">
+            <el-image :src="img.previewUrl" fit="cover" style="width: 60px; height: 60px; border-radius: 10px" />
+            <el-icon class="remove-img" @click="removeUploadedImage(index)"><Close /></el-icon>
+          </div>
         </div>
-      </div>
 
       <div class="chat-input">
         <div class="chat-input__toolbar">
@@ -121,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ChatLineSquare, Close, Delete, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ChatMessage from '@/components/ChatMessage.vue'
@@ -129,6 +129,7 @@ import { deleteChatHistory, generateImage, getChatHistory, getHistoryList, getMo
 import { uploadImages } from '@/api/upload'
 import { useUserStore } from '@/stores/user'
 import type { AiSqlQueryResult, ChatMode, ConversationItem, ImagesResponse, MessageVO, ModelOption } from '@/types'
+import { appendSessionChunk, beginSessionRequest, ensureChatSession, finishSessionRequest, isChatSessionBusy, type ChatSessionMap } from './chatSessions'
 
 defineOptions({ name: 'ChatView' })
 
@@ -167,17 +168,21 @@ const texts = {
 
 const userStore = useUserStore()
 const messagesRef = ref<HTMLElement>()
-const messages = ref<MessageVO[]>([])
 const userInput = ref('')
-const sending = ref(false)
-const generatingImage = ref(false)
 const chatMode = ref<ChatMode>('DIRECT')
 const model = ref('')
 const modelOptions = ref<ModelOption[]>([])
 const modelsLoading = ref(false)
 const currentChatId = ref('')
 const historyItems = ref<ConversationItem[]>([])
-const uploadedImages = ref<ImagesResponse[]>([])
+const chatSessions = reactive<ChatSessionMap<MessageVO, ImagesResponse>>({})
+let requestSeed = 0
+
+const currentSession = computed(() => currentChatId.value ? chatSessions[currentChatId.value] : undefined)
+const messages = computed(() => currentSession.value?.messages ?? [])
+const sending = computed(() => Boolean(currentSession.value?.sending))
+const generatingImage = computed(() => Boolean(currentSession.value?.generatingImage))
+const uploadedImages = computed(() => currentSession.value?.uploadedImages ?? [])
 
 const inputPlaceholder = computed(() => chatMode.value === 'DATA_QUERY' ? texts.dataQueryPlaceholder : texts.inputPlaceholder)
 const emptyStateText = computed(() => {
@@ -193,6 +198,21 @@ const emptyStateText = computed(() => {
 
 function generateChatId() {
   return 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8)
+}
+
+function getChatSession(chatId: string) {
+  return ensureChatSession(chatSessions, chatId)
+}
+
+function resetChatSession(chatId: string, loaded = true) {
+  const session = getChatSession(chatId)
+  session.messages = []
+  session.uploadedImages = []
+  session.sending = false
+  session.generatingImage = false
+  session.loaded = loaded
+  session.activeRequestId = undefined
+  return session
 }
 
 function upsertHistoryItem(chatId: string, title?: string | null, localOnly = false) {
@@ -212,13 +232,13 @@ function upsertHistoryItem(chatId: string, title?: string | null, localOnly = fa
 }
 
 function newChat(addPlaceholder = false) {
-  currentChatId.value = generateChatId()
-  messages.value = []
-  uploadedImages.value = []
+  const chatId = generateChatId()
+  currentChatId.value = chatId
+  resetChatSession(chatId)
   userInput.value = ''
 
   if (addPlaceholder) {
-    upsertHistoryItem(currentChatId.value, texts.newChatPlaceholder, true)
+    upsertHistoryItem(chatId, texts.newChatPlaceholder, true)
   }
 }
 
@@ -233,17 +253,30 @@ async function loadHistoryList() {
 
 async function loadChat(chatId: string) {
   currentChatId.value = chatId
-  try {
-    messages.value = (await getChatHistory(chatId)) || []
+  const session = getChatSession(chatId)
+  if (session.loaded || isChatSessionBusy(session)) {
     scrollToBottom()
+    return
+  }
+
+  try {
+    const history = (await getChatHistory(chatId)) || []
+    const targetSession = chatSessions[chatId]
+    if (!targetSession || targetSession.loaded || isChatSessionBusy(targetSession) || targetSession.messages.length > 0) {
+      return
+    }
+
+    targetSession.messages = history
+    targetSession.loaded = true
+    if (currentChatId.value === chatId) {
+      scrollToBottom()
+    }
   } catch {
   }
 }
 
 function clearCurrentWorkspace() {
   currentChatId.value = ''
-  messages.value = []
-  uploadedImages.value = []
   userInput.value = ''
 }
 
@@ -270,15 +303,16 @@ async function handleDeleteChat(chatId: string) {
     }
 
     historyItems.value = historyItems.value.filter((item) => item.chatId !== chatId)
+    delete chatSessions[chatId]
     const nextItem = historyItems.value[0]
 
     if (currentChatId.value === chatId) {
       if (nextItem) {
         if (nextItem.localOnly) {
           currentChatId.value = nextItem.chatId
-          messages.value = []
-          uploadedImages.value = []
+          getChatSession(nextItem.chatId)
           userInput.value = ''
+          scrollToBottom()
         } else {
           await loadChat(nextItem.chatId)
         }
@@ -295,9 +329,11 @@ async function handleDeleteChat(chatId: string) {
 
 async function handleImageUpload(file: File) {
   try {
+    ensureCurrentChat()
+    const session = getChatSession(currentChatId.value)
     const response = await uploadImages([file])
     if (response && response.length) {
-      uploadedImages.value.push(...response)
+      session.uploadedImages.push(...response)
     }
   } catch {
     ElMessage.error(texts.uploadImageFailed)
@@ -316,12 +352,20 @@ function scrollToBottom() {
 function ensureCurrentChat() {
   if (!currentChatId.value) {
     currentChatId.value = generateChatId()
+    resetChatSession(currentChatId.value)
     upsertHistoryItem(currentChatId.value, texts.newChatPlaceholder, true)
+    return
   }
+
+  getChatSession(currentChatId.value)
 }
 
-function appendNewHistoryTitle(title: string) {
-  upsertHistoryItem(currentChatId.value, title.substring(0, 50) || texts.newChatPlaceholder, false)
+function appendNewHistoryTitle(chatId: string, title: string) {
+  upsertHistoryItem(chatId, title.substring(0, 50) || texts.newChatPlaceholder, false)
+}
+
+function removeUploadedImage(index: number) {
+  currentSession.value?.uploadedImages.splice(index, 1)
 }
 
 async function sendMessage() {
@@ -333,71 +377,102 @@ async function sendMessage() {
   }
 
   ensureCurrentChat()
+  const chatId = currentChatId.value
+  const session = getChatSession(chatId)
+  const requestMode = chatMode.value
 
-  const currentImages = uploadedImages.value.map((img) => img.previewUrl || img.imageUrl)
-  messages.value.push({ role: 'USER', content: input, images: currentImages.length ? currentImages : undefined })
+  const currentImages = session.uploadedImages.map((img) => img.previewUrl || img.imageUrl)
+  session.messages.push({ role: 'USER', content: input, images: currentImages.length ? currentImages : undefined })
   userInput.value = ''
-  sending.value = true
+  session.loaded = true
+  const requestId = ++requestSeed
+  beginSessionRequest(session, 'sending', requestId)
   scrollToBottom()
 
   try {
-    if (chatMode.value === 'DATA_QUERY') {
+    if (requestMode === 'DATA_QUERY') {
       const result = await queryData(input, model.value)
-      messages.value.push(buildDataQueryMessage(result))
-      appendNewHistoryTitle(input)
+      const targetSession = chatSessions[chatId]
+      if (!targetSession || targetSession.activeRequestId !== requestId) {
+        return
+      }
+
+      targetSession.messages.push(buildDataQueryMessage(result))
+      appendNewHistoryTitle(chatId, input)
     } else {
-      messages.value.push({ role: 'ASSISTANT', content: '' })
-      const assistantIndex = messages.value.length - 1
+      session.messages.push({ role: 'ASSISTANT', content: '' })
+      const assistantIndex = session.messages.length - 1
 
       await streamChat({
         userName: userStore.username,
-        chatId: currentChatId.value,
+        chatId,
         userInput: input,
-        chatMode: chatMode.value,
+        chatMode: requestMode,
         model: model.value,
-        imageFiles: uploadedImages.value.length ? uploadedImages.value : null
+        imageFiles: session.uploadedImages.length ? session.uploadedImages : null
       }, {
         onStart: () => {
-          scrollToBottom()
+          if (currentChatId.value === chatId) {
+            scrollToBottom()
+          }
         },
         onChunk: (chunk) => {
-          const assistantMessage = messages.value[assistantIndex]
-          if (assistantMessage) {
-            assistantMessage.content += chunk
+          const updated = appendSessionChunk(chatSessions[chatId], assistantIndex, chunk, requestId)
+          if (updated && currentChatId.value === chatId) {
+            scrollToBottom()
           }
-          scrollToBottom()
         },
         onDone: () => {
-          const assistantMessage = messages.value[assistantIndex]
+          const targetSession = chatSessions[chatId]
+          if (!targetSession || targetSession.activeRequestId !== requestId) {
+            return
+          }
+
+          const assistantMessage = targetSession.messages[assistantIndex]
           if (assistantMessage && !assistantMessage.content) {
             assistantMessage.content = '(empty)'
           }
         },
         onError: (message) => {
-          const assistantMessage = messages.value[assistantIndex]
+          const targetSession = chatSessions[chatId]
+          if (!targetSession || targetSession.activeRequestId !== requestId) {
+            return
+          }
+
+          const assistantMessage = targetSession.messages[assistantIndex]
           if (assistantMessage && message) {
             assistantMessage.content = message
           }
         }
       })
 
-      uploadedImages.value = []
-      appendNewHistoryTitle(input)
+      const targetSession = chatSessions[chatId]
+      if (targetSession?.activeRequestId === requestId) {
+        targetSession.uploadedImages = []
+      }
+      appendNewHistoryTitle(chatId, input)
     }
   } catch {
-    const lastMessage = messages.value[messages.value.length - 1]
+    const targetSession = chatSessions[chatId]
+    if (!targetSession || targetSession.activeRequestId !== requestId) {
+      return
+    }
+
+    const lastMessage = targetSession.messages[targetSession.messages.length - 1]
     if (lastMessage?.role === 'ASSISTANT' && !lastMessage.content) {
-      messages.value.pop()
+      targetSession.messages.pop()
     } else if (lastMessage?.role === 'ASSISTANT' && lastMessage.content) {
       return
     }
-    messages.value.push({
+    targetSession.messages.push({
       role: 'ASSISTANT',
-      content: chatMode.value === 'DATA_QUERY' ? texts.dataQueryFailed : texts.chatFailed
+      content: requestMode === 'DATA_QUERY' ? texts.dataQueryFailed : texts.chatFailed
     })
   } finally {
-    sending.value = false
-    scrollToBottom()
+    finishSessionRequest(chatSessions[chatId], 'sending', requestId)
+    if (currentChatId.value === chatId) {
+      scrollToBottom()
+    }
   }
 }
 
@@ -416,25 +491,42 @@ async function handleGenerateImage() {
   if (!prompt || generatingImage.value || sending.value) return
 
   ensureCurrentChat()
-  generatingImage.value = true
-  messages.value.push({ role: 'USER', content: `${texts.imagePromptPrefix}${prompt}` })
+  const chatId = currentChatId.value
+  const session = getChatSession(chatId)
+  const requestId = ++requestSeed
+
+  beginSessionRequest(session, 'generatingImage', requestId)
+  session.loaded = true
+  session.messages.push({ role: 'USER', content: `${texts.imagePromptPrefix}${prompt}` })
   userInput.value = ''
   scrollToBottom()
 
   try {
-    const image = await generateImage(prompt, currentChatId.value)
+    const image = await generateImage(prompt, chatId)
     const imageUrl = image.previewUrl || image.imageUrl
-    messages.value.push({
+    const targetSession = chatSessions[chatId]
+    if (!targetSession || targetSession.activeRequestId !== requestId) {
+      return
+    }
+
+    targetSession.messages.push({
       role: 'ASSISTANT',
       content: texts.generatedImage,
       images: imageUrl ? [imageUrl] : undefined
     })
-    appendNewHistoryTitle(prompt)
+    appendNewHistoryTitle(chatId, prompt)
   } catch {
-    messages.value.push({ role: 'ASSISTANT', content: texts.imageFailed })
+    const targetSession = chatSessions[chatId]
+    if (!targetSession || targetSession.activeRequestId !== requestId) {
+      return
+    }
+
+    targetSession.messages.push({ role: 'ASSISTANT', content: texts.imageFailed })
   } finally {
-    generatingImage.value = false
-    scrollToBottom()
+    finishSessionRequest(chatSessions[chatId], 'generatingImage', requestId)
+    if (currentChatId.value === chatId) {
+      scrollToBottom()
+    }
   }
 }
 
@@ -460,7 +552,9 @@ onMounted(() => {
 
 watch(chatMode, (mode) => {
   if (mode === 'DATA_QUERY') {
-    uploadedImages.value = []
+    if (currentSession.value) {
+      currentSession.value.uploadedImages = []
+    }
   }
 })
 </script>
