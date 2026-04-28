@@ -6,7 +6,10 @@
     :rules="rules"
     :search-config="searchConfig"
     :filter-configs="filterConfigs"
-    :readonly="userStore.role === 'STUDENT'"
+    :readonly="permissions.isReadOnly"
+    :allow-create="permissions.canCreate"
+    :allow-edit="permissions.canEdit"
+    :allow-delete="permissions.canDelete"
   />
 </template>
 
@@ -17,11 +20,13 @@ import type { Column, FilterConfig, SearchConfig } from '@/components/CrudTable.
 import { createCrudApi } from '@/api/crud'
 import { getUserOptions } from '@/api/user'
 import { useUserStore } from '@/stores/user'
-import type { Student } from '@/types'
+import type { Role, Student } from '@/types'
+import { getCrudPermissions } from '@/access/moduleRules'
 
 const userStore = useUserStore()
 const api = createCrudApi<Student>('/api/students')
 const studentUserOptions = ref<Array<{ label: string; value: number }>>([])
+const permissions = computed(() => getCrudPermissions('students', (userStore.role || 'STUDENT') as Role))
 
 const genderOptions = [
   { label: '男', value: '男' },
@@ -37,7 +42,7 @@ const columns = computed<Column[]>(() => {
   const isStudent = userStore.role === 'STUDENT'
   return [
     { prop: 'id', label: 'ID', width: 60, tableOnly: true },
-    { prop: 'userId', label: '关联学生用户', type: 'select', options: studentUserOptions.value, formOnly: true },
+    { prop: 'userId', label: '用户id', type: 'select', options: studentUserOptions.value, formOnly: true },
     { prop: 'name', label: '姓名' },
     { prop: 'gender', label: '性别', type: 'select', options: genderOptions },
     { prop: 'grade', label: '年级', type: 'select', options: gradeOptions },

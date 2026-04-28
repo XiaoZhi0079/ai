@@ -6,9 +6,9 @@
     :rules="rules"
     :search-config="searchConfig"
     :filter-configs="filterConfigs"
-    :readonly="userStore.role === 'STUDENT'"
-    :allow-create="userStore.role === 'ADMIN'"
-    :allow-delete="userStore.role === 'ADMIN'"
+    :readonly="permissions.isReadOnly"
+    :allow-create="permissions.canCreate"
+    :allow-delete="permissions.canDelete"
     :allow-edit="canEditTeacher"
     :field-disabled="isFieldDisabled"
   />
@@ -21,11 +21,13 @@ import type { Column, FilterConfig, FormFieldContext, SearchConfig } from '@/com
 import { createCrudApi } from '@/api/crud'
 import { getUserOptions } from '@/api/user'
 import { useUserStore } from '@/stores/user'
-import type { Teacher } from '@/types'
+import type { Role, Teacher } from '@/types'
+import { getCrudPermissions } from '@/access/moduleRules'
 
 const userStore = useUserStore()
 const api = createCrudApi<Teacher>('/api/teachers')
 const teacherUserOptions = ref<Array<{ label: string; value: number }>>([])
+const permissions = computed(() => getCrudPermissions('teachers', (userStore.role || 'STUDENT') as Role))
 
 const genderOptions = [
   { label: '男', value: '男' },
@@ -35,7 +37,7 @@ const genderOptions = [
 const columns = computed<Column[]>(() => [
   { prop: 'id', label: 'ID', width: 60, tableOnly: true },
   ...(userStore.role === 'ADMIN'
-    ? [{ prop: 'userId', label: '关联教师用户', type: 'select' as const, options: teacherUserOptions.value, formOnly: true }]
+    ? [{ prop: 'userId', label: '用户id', type: 'select' as const, options: teacherUserOptions.value, formOnly: true }]
     : []),
   { prop: 'name', label: '姓名' },
   { prop: 'gender', label: '性别', type: 'select', options: genderOptions },
@@ -74,6 +76,7 @@ const defaultForm = () => ({
 
 function canEditTeacher(row: Teacher) {
   // 管理员可编辑任意教师；教师只能编辑自己绑定的教师档案；学生只读。
+  if (!permissions.value.canEdit) return false
   if (userStore.role === 'ADMIN') return true
   if (userStore.role === 'TEACHER') return row.userId === userStore.id
   return false

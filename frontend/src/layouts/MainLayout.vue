@@ -66,6 +66,7 @@ import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import type { Role } from '@/types'
+import { getModuleTitle, type ManagedModuleKey } from '@/access/moduleRules'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -77,27 +78,43 @@ const roleLabel = computed(() => {
 })
 
 const userInitial = computed(() => userStore.username?.slice(0, 1).toUpperCase() || 'U')
+const currentRole = computed(() => (userStore.role || 'STUDENT') as Role)
 
-interface MenuItem { path: string; title: string; icon: string; roles?: Role[] }
+interface MenuItem {
+  path: string
+  title?: string
+  moduleKey?: ManagedModuleKey
+  icon: string
+  roles?: Role[]
+}
 
 const allMenus: MenuItem[] = [
   { path: '/dashboard', title: '仪表盘', icon: 'Odometer' },
   { path: '/chat', title: 'AI 对话', icon: 'ChatDotRound' },
   { path: '/users', title: '用户管理', icon: 'User', roles: ['ADMIN'] },
-  { path: '/teachers', title: '教师信息', icon: 'Avatar', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
-  { path: '/students', title: '学生信息', icon: 'Reading', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
-  { path: '/courses', title: '课程信息', icon: 'Notebook', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
-  { path: '/grades', title: '成绩信息', icon: 'TrendCharts', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/teachers', moduleKey: 'teachers', icon: 'Avatar', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/students', moduleKey: 'students', icon: 'Reading', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/courses', moduleKey: 'courses', icon: 'Notebook', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+  { path: '/grades', moduleKey: 'grades', icon: 'TrendCharts', roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
   { path: '/rag', title: '知识库', icon: 'UploadFilled', roles: ['ADMIN', 'TEACHER', 'STUDENT'] }
 ]
 
+function resolveMenuTitle(item: MenuItem) {
+  return item.moduleKey ? getModuleTitle(item.moduleKey, currentRole.value) : item.title || ''
+}
+
 const menuItems = computed(() =>
-  allMenus.filter((m) => !m.roles || m.roles.includes(userStore.role as Role))
+  allMenus
+    .filter((m) => !m.roles || m.roles.includes(currentRole.value))
+    .map((item) => ({
+      ...item,
+      title: resolveMenuTitle(item)
+    }))
 )
 
 const currentPageTitle = computed(() => {
   const current = allMenus.find((item) => route.path.startsWith(item.path))
-  return current?.title || '工作台'
+  return current ? resolveMenuTitle(current) : '工作台'
 })
 </script>
 
@@ -285,7 +302,9 @@ const currentPageTitle = computed(() => {
   flex: 1;
   min-height: 0;
   padding: 8px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 :deep(.el-menu) {

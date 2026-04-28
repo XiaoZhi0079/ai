@@ -1,6 +1,8 @@
 package com.example.ai.service.impl;
 
 import com.example.ai.entity.User;
+import com.example.ai.entity.Student;
+import com.example.ai.entity.Teacher;
 import com.example.ai.mapper.RegistrationKeyMapper;
 import com.example.ai.mapper.UserMapper;
 import com.example.ai.pojo.AuthResponse;
@@ -9,8 +11,11 @@ import com.example.ai.pojo.RegisterRequest;
 import com.example.ai.security.Role;
 import com.example.ai.service.AuthService;
 import com.example.ai.service.OperationLogService;
+import com.example.ai.service.StudentService;
+import com.example.ai.service.TeacherService;
 import com.example.ai.utils.JWT;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -28,16 +33,16 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final OperationLogService operationLogService;
     private final RegistrationKeyMapper registrationKeyMapper;
+    private final StudentService studentService;
+    private final TeacherService teacherService;
 
     @Override
+    @Transactional
     public AuthResponse register(RegisterRequest request, String operator) {
-        if (request.getUsername() == null || request.getUsername().isBlank()) {
-            throw new IllegalArgumentException("Username is required");
-        }
-        if (request.getPassword() == null || request.getPassword().isBlank()) {
-            throw new IllegalArgumentException("Password is required");
-        }
-        if (userMapper.countByUsername(request.getUsername()) > 0) {
+        String username = requireText(request.getUsername(), "Username is required");
+        String password = requireText(request.getPassword(), "Password is required");
+
+        if (userMapper.countByUsername(username) > 0) {
             throw new IllegalArgumentException("Username already exists");
         }
         if (request.getEmail() != null && !request.getEmail().isBlank()
@@ -47,8 +52,8 @@ public class AuthServiceImpl implements AuthService {
 
         // Encode the password before persisting the user record.
         User user = new User();
-        user.setUsername(request.getUsername());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(password));
         user.setEmail(request.getEmail());
 
         // Default to the student role unless the caller explicitly selects one.
@@ -69,10 +74,19 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalArgumentException("Admin accounts cannot be self-registered");
         }
 
+        validateProfileFields(request, targetRole);
+
         user.setRole(targetRole);
         user.setStatus(1);
         userMapper.insert(user);
         User saved = userMapper.selectById(user.getId());
+
+        // Auto-create the role profile so registration produces a complete business identity.
+        if (targetRole == Role.STUDENT) {
+            studentService.create(buildStudentProfile(saved, request), operator);
+        } else if (targetRole == Role.TEACHER) {
+            teacherService.create(buildTeacherProfile(saved, request), operator);
+        }
 
         // Mark the teacher registration key as consumed after the user is saved.
         if (targetRole == Role.TEACHER) {
@@ -115,5 +129,49 @@ public class AuthServiceImpl implements AuthService {
             return false;
         }
         return passwordEncoder.matches(raw, stored);
+    }
+
+    private Student buildStudentProfile(User user, RegisterRequest request) {
+        Student student = new Student();
+        student.setUserId(user.getId());
+        student.setName(request.getName().trim());
+        student.setGender(request.getGender().trim());
+        student.setGrade(request.getGrade());
+        student.setMajor(request.getMajor().trim());
+        student.setClassName(request.getClassName().trim());
+        return student;
+    }
+
+    private Teacher buildTeacherProfile(User user, RegisterRequest request) {
+        Teacher teacher = new Teacher();
+        teacher.setUserId(user.getId());
+        teacher.setName(request.getName().trim());
+        teacher.setGender(request.getGender().trim());
+        teacher.setPhone(request.getPhone().trim());
+        teacher.setDepartment(request.getDepartment().trim());
+        return teacher;
+    }
+
+    private void validateProfileFields(RegisterRequest request, Role targetRole) {
+        requireText(request.getName(), "Name is required");
+        requireText(request.getGender(), "Gender is required");
+
+        if (targetRole == Role.STUDENT) {
+            if (request.getGrade() == null) {
+                throw new IllegalArgumentException("Grade is required");
+            }
+            requireText(request.getMajor(), "Major is required");
+            requireText(request.getClassName(), "Class name is required");
+        } else if (targetRole == Role.TEACHER) {
+            requireText(request.getPhone(), "Phone is required");
+            requireText(request.getDepartment(), "Department is required");
+        }
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 }

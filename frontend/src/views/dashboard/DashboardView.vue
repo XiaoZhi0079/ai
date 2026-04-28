@@ -48,34 +48,58 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import type { Role } from '@/types'
+import { getModuleTitle } from '@/access/moduleRules'
 
 const router = useRouter()
 const userStore = useUserStore()
-const roleLabel = computed(() => {
-  const map: Record<string, string> = { ADMIN: '管理员', TEACHER: '教师', STUDENT: '学生' }
-  return map[userStore.role] || ''
-})
+const currentRole = computed(() => (userStore.role || 'STUDENT') as Role)
 
 const capabilityTags = ['知识问答', '网络检索', '教务查询']
+
+function buildModuleCard(
+  moduleKey: 'users' | 'teachers' | 'students' | 'courses' | 'grades',
+  desc: string,
+  icon: string,
+  color: string,
+  path: string
+) {
+  return {
+    title: getModuleTitle(moduleKey, currentRole.value),
+    desc,
+    icon,
+    color,
+    path
+  }
+}
 
 const cards = computed(() => {
   const base = [
     { title: '知识库', desc: '查看与管理知识文档、知识问答资源', icon: 'UploadFilled', color: '#1b9ba8', path: '/rag' }
   ]
-  if (userStore.isAdmin || userStore.isTeacher) {
+
+  if (currentRole.value === 'ADMIN') {
     base.push(
-      { title: '学生管理', desc: '查看与维护学生档案及相关信息', icon: 'Reading', color: '#2d8c63', path: '/students' },
-      { title: '课程管理', desc: '管理课程信息与教学相关数据', icon: 'Notebook', color: '#d38a2a', path: '/courses' }
+      buildModuleCard('users', '管理系统用户与角色权限配置', 'User', '#ad4f84', '/users'),
+      buildModuleCard('teachers', '维护教师档案与教学联系信息', 'Avatar', '#1f78b4', '/teachers'),
+      buildModuleCard('students', '查看与维护学生档案及相关信息', 'Reading', '#2d8c63', '/students'),
+      buildModuleCard('courses', '管理课程信息与教学相关数据', 'Notebook', '#d38a2a', '/courses'),
+      buildModuleCard('grades', '录入、修改与核对成绩数据', 'TrendCharts', '#6f63d9', '/grades')
+    )
+  } else if (currentRole.value === 'TEACHER') {
+    base.push(
+      buildModuleCard('teachers', '查看个人教师档案并维护可编辑字段', 'Avatar', '#1f78b4', '/teachers'),
+      buildModuleCard('students', '查看与维护学生档案及相关信息', 'Reading', '#2d8c63', '/students'),
+      buildModuleCard('courses', '管理课程信息与教学相关数据', 'Notebook', '#d38a2a', '/courses'),
+      buildModuleCard('grades', '录入、修改与核对成绩数据', 'TrendCharts', '#6f63d9', '/grades')
     )
   } else {
     base.push(
-      { title: '课程信息', desc: '快速查看课程安排与课程相关信息', icon: 'Notebook', color: '#d38a2a', path: '/courses' },
-      { title: '成绩信息', desc: '查看与访问个人或教学相关成绩数据', icon: 'TrendCharts', color: '#6f63d9', path: '/grades' }
+      buildModuleCard('teachers', '快速查看教师档案与联系方式', 'Avatar', '#1f78b4', '/teachers'),
+      buildModuleCard('students', '查看个人学生档案信息', 'Reading', '#2d8c63', '/students'),
+      buildModuleCard('courses', '快速查看课程安排与课程相关信息', 'Notebook', '#d38a2a', '/courses'),
+      buildModuleCard('grades', '查看与访问个人成绩数据', 'TrendCharts', '#6f63d9', '/grades')
     )
-  }
-
-  if (userStore.isAdmin) {
-    base.push({ title: '用户管理', desc: '管理系统用户与角色权限配置', icon: 'User', color: '#ad4f84', path: '/users' })
   }
 
   return base

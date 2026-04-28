@@ -55,6 +55,7 @@ public class StudentServiceImpl implements StudentService {
                 existing.setUserId(student.getUserId());
             }
             existing.setName(student.getName());
+            existing.setGender(student.getGender());
             existing.setGrade(student.getGrade());
             existing.setMajor(student.getMajor());
             existing.setClassName(student.getClassName());

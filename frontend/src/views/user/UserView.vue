@@ -12,6 +12,10 @@
       :search-config="searchConfig"
       :filter-configs="filterConfigs"
       :category-config="categoryConfig"
+      :readonly="tableFlags.readonly"
+      :allow-create="tableFlags.allowCreate"
+      :allow-edit="tableFlags.allowEdit"
+      :allow-delete="tableFlags.allowDelete"
     />
 
     <el-dialog v-model="keyDialogVisible" title="教师注册码" width="460px">
@@ -26,15 +30,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import CrudTable from '@/components/CrudTable.vue'
 import type { CategoryConfig, Column, FilterConfig, SearchConfig } from '@/components/CrudTable.vue'
 import { createCrudApi } from '@/api/crud'
 import { generateRegistrationKey } from '@/api/auth'
-import type { UserView } from '@/types'
+import { useUserStore } from '@/stores/user'
+import type { Role, UserView } from '@/types'
+import { getCrudTableFlags } from '@/access/moduleRules'
 
+const userStore = useUserStore()
 const api = createCrudApi<UserView>('/api/users')
+const tableFlags = computed(() => getCrudTableFlags('users', (userStore.role || 'STUDENT') as Role))
 
 const roleOptions = [
   { label: '管理员', value: 'ADMIN' },

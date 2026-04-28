@@ -76,10 +76,38 @@
                     <el-option label="教师" value="TEACHER" />
                   </el-select>
                 </el-form-item>
+                <el-form-item prop="name">
+                  <el-input v-model="registerForm.name" prefix-icon="UserFilled" placeholder="姓名" />
+                </el-form-item>
+                <el-form-item prop="gender">
+                  <el-select v-model="registerForm.gender" placeholder="选择性别" style="width: 100%">
+                    <el-option label="男" value="男" />
+                    <el-option label="女" value="女" />
+                  </el-select>
+                </el-form-item>
+                <template v-if="registerForm.role === 'STUDENT'">
+                  <el-form-item prop="grade">
+                    <el-input-number v-model="registerForm.grade" :min="2000" :max="2100" style="width: 100%" placeholder="年级" />
+                  </el-form-item>
+                  <el-form-item prop="major">
+                    <el-input v-model="registerForm.major" placeholder="专业" />
+                  </el-form-item>
+                  <el-form-item prop="className">
+                    <el-input v-model="registerForm.className" placeholder="班级" />
+                  </el-form-item>
+                </template>
+                <template v-else>
+                  <el-form-item prop="phone">
+                    <el-input v-model="registerForm.phone" prefix-icon="Phone" placeholder="电话" />
+                  </el-form-item>
+                  <el-form-item prop="department">
+                    <el-input v-model="registerForm.department" placeholder="院系" />
+                  </el-form-item>
+                </template>
                 <el-form-item v-if="registerForm.role === 'TEACHER'" prop="registrationKey">
                   <el-input v-model="registerForm.registrationKey" prefix-icon="Key" placeholder="注册密钥" />
                 </el-form-item>
-                <p class="form-hint">教师账号注册需提供注册密钥，学生账号可直接创建。</p>
+                <p class="form-hint">注册时需填写最小必要资料。教师账号注册需提供注册密钥，注册成功后请使用账号密码登录系统。</p>
                 <el-form-item>
                   <el-button type="primary" class="login-btn" :loading="loading" @click="handleRegister">注 册</el-button>
                 </el-form-item>
@@ -95,9 +123,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import type { Role } from '@/types'
+import type { RegisterRequest, Role } from '@/types'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -107,12 +135,19 @@ const loginFormRef = ref<FormInstance>()
 const registerFormRef = ref<FormInstance>()
 
 const loginForm = reactive({ username: '', password: '' })
-const registerForm = reactive<{ username: string; password: string; email: string; role: Role; registrationKey: string }>({
+const registerForm = reactive<RegisterRequest>({
   username: '',
   password: '',
   email: '',
   role: 'STUDENT',
-  registrationKey: ''
+  registrationKey: '',
+  name: '',
+  gender: '',
+  grade: undefined as number | undefined,
+  major: '',
+  className: '',
+  phone: '',
+  department: ''
 })
 
 const loginRules = {
@@ -120,12 +155,66 @@ const loginRules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
-const registerRules = {
+const validateTeacherField = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (registerForm.role === 'TEACHER' && !value?.trim()) {
+    callback(new Error('请填写该字段'))
+    return
+  }
+  callback()
+}
+
+const validateStudentField = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (registerForm.role === 'STUDENT' && !value?.trim()) {
+    callback(new Error('请填写该字段'))
+    return
+  }
+  callback()
+}
+
+const validateStudentGrade = (_rule: unknown, value: number | undefined, callback: (error?: Error) => void) => {
+  if (registerForm.role === 'STUDENT' && (value == null || Number.isNaN(value))) {
+    callback(new Error('请选择年级'))
+    return
+  }
+  callback()
+}
+
+const validateRegistrationKey = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (registerForm.role === 'TEACHER' && !value?.trim()) {
+    callback(new Error('请输入注册密钥'))
+    return
+  }
+  callback()
+}
+
+const registerRules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 4, message: '密码至少4位', trigger: 'blur' }],
   email: [{ required: true, message: '请输入邮箱', trigger: 'blur' }, { type: 'email' as const, message: '邮箱格式不正确', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-  registrationKey: [{ required: true, message: '请输入注册密钥', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
+  grade: [{ validator: validateStudentGrade, trigger: 'change' }],
+  major: [{ validator: validateStudentField, trigger: 'blur' }],
+  className: [{ validator: validateStudentField, trigger: 'blur' }],
+  phone: [{ validator: validateTeacherField, trigger: 'blur' }],
+  department: [{ validator: validateTeacherField, trigger: 'blur' }],
+  registrationKey: [{ validator: validateRegistrationKey, trigger: 'blur' }]
+}
+
+function resetRegisterForm() {
+  registerForm.username = ''
+  registerForm.password = ''
+  registerForm.email = ''
+  registerForm.role = 'STUDENT'
+  registerForm.registrationKey = ''
+  registerForm.name = ''
+  registerForm.gender = ''
+  registerForm.grade = undefined
+  registerForm.major = ''
+  registerForm.className = ''
+  registerForm.phone = ''
+  registerForm.department = ''
 }
 
 async function handleLogin() {
@@ -157,8 +246,13 @@ async function handleRegister() {
   loading.value = true
   try {
     await userStore.register(registerForm)
-    ElMessage.success('注册成功')
-    router.push('/dashboard')
+    loginForm.username = registerForm.username
+    loginForm.password = ''
+    resetRegisterForm()
+    registerFormRef.value?.clearValidate()
+    activeTab.value = 'login'
+    ElMessage.success('注册成功，请登录')
+    router.push('/login')
   } catch {
     // 错误已由全局拦截器处理
   } finally {

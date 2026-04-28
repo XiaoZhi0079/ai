@@ -6,7 +6,10 @@
     :rules="rules"
     :search-config="searchConfig"
     :filter-configs="filterConfigs"
-    :readonly="userStore.role === 'STUDENT'"
+    :readonly="permissions.isReadOnly"
+    :allow-create="permissions.canCreate"
+    :allow-edit="permissions.canEdit"
+    :allow-delete="permissions.canDelete"
   />
 </template>
 
@@ -16,7 +19,8 @@ import CrudTable from '@/components/CrudTable.vue'
 import type { Column, FilterConfig, SearchConfig } from '@/components/CrudTable.vue'
 import { createCrudApi } from '@/api/crud'
 import { useUserStore } from '@/stores/user'
-import type { Course, Grade, Student } from '@/types'
+import type { Course, Grade, Role, Student } from '@/types'
+import { getCrudPermissions } from '@/access/moduleRules'
 
 type GradeRow = Grade & { studentName?: string; courseName?: string }
 
@@ -28,6 +32,7 @@ const courseApi = createCrudApi<Course>('/api/courses')
 const studentOptions = ref<Array<{ label: string; value: number }>>([])
 const courseOptions = ref<Array<{ label: string; value: number }>>([])
 const semesterOptions = ref<Array<{ label: string; value: number }>>(buildSemesterOptions())
+const permissions = computed(() => getCrudPermissions('grades', (userStore.role || 'STUDENT') as Role))
 
 function buildSemesterOptions(extraYears: number[] = []) {
   const currentYear = new Date().getFullYear()

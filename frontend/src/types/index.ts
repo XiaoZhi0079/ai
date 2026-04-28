@@ -18,6 +18,13 @@ export interface RegisterRequest {
   email: string
   role?: Role
   registrationKey?: string
+  name: string
+  gender: string
+  grade?: number
+  major?: string
+  className?: string
+  phone?: string
+  department?: string
 }
 
 export interface AuthResponse {

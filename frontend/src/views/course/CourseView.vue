@@ -5,7 +5,10 @@
     :default-form="defaultForm"
     :rules="rules"
     :search-config="searchConfig"
-    :readonly="userStore.role === 'STUDENT'"
+    :readonly="permissions.isReadOnly"
+    :allow-create="permissions.canCreate"
+    :allow-edit="permissions.canEdit"
+    :allow-delete="permissions.canDelete"
   />
 </template>
 
@@ -15,7 +18,8 @@ import CrudTable from '@/components/CrudTable.vue'
 import type { Column, SearchConfig } from '@/components/CrudTable.vue'
 import { createCrudApi } from '@/api/crud'
 import { useUserStore } from '@/stores/user'
-import type { Course, Teacher } from '@/types'
+import type { Course, Role, Teacher } from '@/types'
+import { getCrudPermissions } from '@/access/moduleRules'
 
 type CourseRow = Course & { teacherName?: string }
 
@@ -23,6 +27,7 @@ const userStore = useUserStore()
 const courseApi = createCrudApi<Course>('/api/courses')
 const teacherApi = createCrudApi<Teacher>('/api/teachers')
 const teacherOptions = ref<Array<{ label: string; value: number }>>([])
+const permissions = computed(() => getCrudPermissions('courses', (userStore.role || 'STUDENT') as Role))
 
 const api = {
   ...courseApi,

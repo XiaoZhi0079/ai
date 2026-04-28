@@ -45,13 +45,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function register(req: RegisterRequest) {
-    const res = await registerApi(req)
-    id.value = res.id
-    username.value = res.username
-    role.value = res.role
-    email.value = res.email
-    token.value = res.token || ''
-    persist()
+    return registerApi(req)
   }
 
   function logout() {
