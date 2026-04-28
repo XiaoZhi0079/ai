@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(git mv:*)",
+      "Bash(git add:*)",
+      "Bash(git worktree:*)",
+      "Bash(git branch:*)",
+      "Bash(python:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(find backend:*)",
+      "Bash(cd:*)",
+      "Bash(javap:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
